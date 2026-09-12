@@ -141,9 +141,9 @@ class CloseTradeRequest(BaseModel):
     exit_reason: Optional[str] = Field("Manual / UI Execution", max_length=128)
 
 # ==========================================
-# 1. QUANT ENGINE (Single Source of Truth from engine/)
-# ==========================================
 from engine import DataGuard, FeatureEngine, RegimeEngine, StrategyEngine, RiskEngine, QuantEngine, MarketSchedule
+from engine.option_engine import OptionEngine
+from engine.option_strategy_library import OptionStrategyLibrary
 
 # ==========================================
 # 2. FASTAPI & FRONTEND ROUTES
@@ -381,29 +381,73 @@ async def analyze_option(symbol: str):
         contracts = await poc.get_options_chain(sym, contract_type=c_type, spot_price=stock_price)
         if contracts:
             best_c = min(contracts, key=lambda x: abs(x.get('strike_price', 0) - stock_price))
-            bid = best_c.get("bid_price", 0.0)
-            ask = best_c.get("ask_price", 0.0)
-            vol = best_c.get("volume", 0)
-            oi = best_c.get("open_interest", 0)
-            iv = best_c.get("implied_volatility", 0.0)
-            prem = best_c.get("last_trade_price", 0.0) or ((bid + ask) / 2.0 if (bid + ask) > 0 else 0.0)
-
-            liq_score = min((vol + oi) / 1000.0 * 50.0, 50.0)
-            spread = (ask - bid) / ask if ask > 0 else 1.0
-            spread_score = 30.0 * max(1.0 - (spread / 0.10), 0.0)
-            iv_penalty = min(iv * 20.0, 20.0) if iv else 10.0
-            final_opt_score = round(min(max(liq_score + spread_score + (20.0 - iv_penalty), 5.0), 98.0), 1)
-
+            opt_eval = OptionEngine.evaluate(
+                spot_price=stock_price,
+                spot_atr=atr if 'atr' in locals() else max(stock_price * 0.015, 0.50),
+                direction_bias=quant_res.get("direction_bias", "NEUTRAL"),
+                option_quote=best_c,
+                contract_meta=best_c
+            )
             opt_data.update({
                 "strike": best_c.get("strike_price"),
-                "premium": prem,
+                "premium": opt_eval.get("premium"),
                 "expiration": best_c.get("expiration_date", "N/A"),
-                "volume": vol,
-                "open_interest": oi,
-                "implied_volatility": f"{round(iv * 100, 2)}%" if iv else "Data unavailable",
-                "bid_ask": f"${bid:.2f} / ${ask:.2f}" if (bid and ask) else "Data unavailable",
+                "volume": opt_eval.get("volume"),
+                "open_interest": opt_eval.get("open_interest"),
+                "implied_volatility": opt_eval.get("iv_pct_str"),
+                "bid_ask": f"${opt_eval.get('bid', 0.0):.2f} / ${opt_eval.get('ask', 0.0):.2f}",
                 "contract_symbol": best_c.get("ticker", "N/A"),
-                "option_score": final_opt_score
+                "option_score": opt_eval.get("option_score"),
+                "is_0dte": opt_eval.get("is_0dte"),
+                "dte": opt_eval.get("dte"),
+                "minutes_to_expiry": opt_eval.get("minutes_to_expiry"),
+                "time_of_day_bucket": opt_eval.get("time_of_day_bucket"),
+                "greeks": opt_eval.get("greeks"),
+                "delta": opt_eval.get("delta"),
+                "gamma": opt_eval.get("gamma"),
+                "gamma_risk": opt_eval.get("gamma_risk"),
+                "theta": opt_eval.get("theta"),
+                "theta_hourly": opt_eval.get("theta_hourly"),
+                "vega": opt_eval.get("vega"),
+                "expected_move": opt_eval.get("expected_move"),
+                "expected_move_pct": opt_eval.get("expected_move_pct"),
+                "preferred_strategy": opt_eval.get("preferred_strategy"),
+                "multi_leg_structure": opt_eval.get("multi_leg_structure")
+            })
+        else:
+            # Theoretical Option Fallback via OptionEngine
+            opt_eval = OptionEngine.evaluate(
+                spot_price=stock_price,
+                spot_atr=atr if 'atr' in locals() else max(stock_price * 0.015, 0.50),
+                direction_bias=quant_res.get("direction_bias", "NEUTRAL"),
+                option_quote={"strike_price": round(stock_price), "bid_price": round(stock_price * 0.015, 2), "ask_price": round(stock_price * 0.017, 2)},
+                contract_meta={"ticker": f"{sym}_ATM", "strike_price": round(stock_price), "expiration_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
+            )
+            opt_data.update({
+                "strike": round(stock_price),
+                "premium": opt_eval.get("premium"),
+                "expiration": opt_eval.get("expiration"),
+                "volume": 0,
+                "open_interest": 0,
+                "implied_volatility": opt_eval.get("iv_pct_str"),
+                "bid_ask": f"${opt_eval.get('bid', 0.0):.2f} / ${opt_eval.get('ask', 0.0):.2f}",
+                "contract_symbol": f"{sym}_ATM",
+                "option_score": opt_eval.get("option_score"),
+                "is_0dte": opt_eval.get("is_0dte"),
+                "dte": opt_eval.get("dte"),
+                "minutes_to_expiry": opt_eval.get("minutes_to_expiry"),
+                "time_of_day_bucket": opt_eval.get("time_of_day_bucket"),
+                "greeks": opt_eval.get("greeks"),
+                "delta": opt_eval.get("delta"),
+                "gamma": opt_eval.get("gamma"),
+                "gamma_risk": opt_eval.get("gamma_risk"),
+                "theta": opt_eval.get("theta"),
+                "theta_hourly": opt_eval.get("theta_hourly"),
+                "vega": opt_eval.get("vega"),
+                "expected_move": opt_eval.get("expected_move"),
+                "expected_move_pct": opt_eval.get("expected_move_pct"),
+                "preferred_strategy": opt_eval.get("preferred_strategy"),
+                "multi_leg_structure": opt_eval.get("multi_leg_structure")
             })
     except Exception as e:
         logger.error(f"Failed to fetch live options chain ({sym}): {e}")
@@ -482,6 +526,9 @@ async def analyze_option(symbol: str):
     return {
         "quant_synthesis": quant_res,
         "option_contract": opt_data,
+        "multi_leg_structure": opt_data.get("multi_leg_structure"),
+        "confluence_evaluation": quant_res.get("confluence_evaluation"),
+        "htf_pattern": quant_res.get("htf_pattern"),
         "trades": trades,
         "trade_history": trades
     }
@@ -670,6 +717,7 @@ async def _get_live_market_context(msg: str) -> str:
             closes = [float(x) for x in df["Close"].tolist()]
             highs = [float(x) for x in df["High"].tolist()]
             lows = [float(x) for x in df["Low"].tolist()]
+            volumes = [float(x) if (float(x) > 0) else 1.0 for x in df["Volume"].tolist()]
             curr = closes[-1]
             prev = closes[-2] if len(closes) >= 2 else curr
             chg = ((curr - prev) / prev) * 100 if prev else 0.0
@@ -684,6 +732,32 @@ async def _get_live_market_context(msg: str) -> str:
             is_bist = sym.endswith(".IS")
             cur_sym = " TL" if is_bist else "$"
             prefix = "" if is_bist else "$"
+
+            # Deep Quant Synthesis
+            quant_lines = []
+            if len(closes) >= 35:
+                try:
+                    q = QuantEngine.analyze_ticker(sym, highs, lows, closes, volumes)
+                    conf = q.get("confluence_evaluation", {})
+                    htf = q.get("htf_pattern", {})
+                    quant_lines.append(f"- Decision / Verdict: {q.get('decision')} | Strategy: {q.get('strategy')}")
+                    quant_lines.append(f"- Confluence Score: {conf.get('net_confluence', 0):.0f}% (Positive: {conf.get('confluence_score', 0):.0f}, Contradiction Penalty: {conf.get('contradiction_penalty', 0):.0f})")
+                    if htf.get("has_htf_setup"):
+                        quant_lines.append(f"- HTF Structural Pattern: {htf.get('primary_htf_pattern')} (Score: {htf.get('htf_score', 0):.0f})")
+                    if q.get("reasons"):
+                        quant_lines.append(f"- Key Confirmations: {'; '.join(q.get('reasons')[:3])}")
+                    if q.get("warnings"):
+                        quant_lines.append(f"- Risk Warnings: {'; '.join(q.get('warnings')[:2])}")
+                    # Recommended Option Structure & 0DTE Expected Move
+                    em = round(curr * 0.30 * 0.04, 2)  # ~1.2% daily expected move baseline
+                    quant_lines.append(f"- 0DTE Expected Move: ±{prefix}{em:.2f}{cur_sym} (Range: {prefix}{curr-em:.2f} - {prefix}{curr+em:.2f})")
+                    opt_bias = "BULL_CALL_SPREAD" if "BULL" in q.get("direction_bias", "") else ("BEAR_PUT_SPREAD" if "BEAR" in q.get("direction_bias", "") else "IRON_CONDOR")
+                    quant_lines.append(f"- Recommended Option Structure: {opt_bias} (Defined-Risk)")
+                except Exception as q_err:
+                    logger.debug(f"Quant summary error: {q_err}")
+
+            quant_block = "\n" + "\n".join(quant_lines) if quant_lines else ""
+
             return (
                 f"\n[LIVE SYSTEM MARKET METRICS ({sym} - Date: {df.index[-1].strftime('%Y-%m-%d')} - Daily Bars)]:\n"
                 f"- Symbol: {sym}\n"
@@ -694,7 +768,8 @@ async def _get_live_market_context(msg: str) -> str:
                 f"- 14-Day RSI: {rsi:.1f}\n"
                 f"- 14-Day ATR: {prefix}{atr:.2f}{cur_sym}\n"
                 f"- Market Regime: {trend}\n"
-                f"- Critical Levels: Resistance/Target (+1 ATR) = {prefix}{curr+atr:.2f}, Support 1 (9 EMA) = {prefix}{ema9:.2f}, Support 2 (21 EMA) = {prefix}{ema21:.2f}\n"
+                f"- Critical Levels: Target (+1 ATR) = {prefix}{curr+atr:.2f}, Support 1 (9 EMA) = {prefix}{ema9:.2f}, Support 2 (21 EMA) = {prefix}{ema21:.2f}"
+                f"{quant_block}\n"
             )
 
         context_str = await asyncio.to_thread(_fetch_candles, target_sym)

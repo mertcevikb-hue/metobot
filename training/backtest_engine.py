@@ -107,6 +107,12 @@ class BacktestStats:
     avg_win: float = 0.0
     avg_loss: float = 0.0
     profit_factor: float = 0.0
+    expectancy: float = 0.0
+    max_win_trade: float = 0.0
+    max_loss_trade: float = 0.0
+    tp_hit_count: int = 0
+    sl_hit_count: int = 0
+    tp_hit_rate: float = 0.0
 
     sharpe_ratio: float = 0.0
     sortino_ratio: float = 0.0
@@ -114,19 +120,29 @@ class BacktestStats:
     avg_trade_duration: int = 0
 
     def calculate(self, trades: List[Trade], returns: List[float]):
-        """Calculate all statistics."""
+        """Calculate all statistics including 0DTE expectancy and risk metrics."""
         if not trades:
             return
 
         self.total_trades = len(trades)
         self.winning_trades = sum(1 for t in trades if t.is_profit())
         self.losing_trades = self.total_trades - self.winning_trades
-        self.win_rate = self.winning_trades / self.total_trades if self.total_trades > 0 else 0
+        self.win_rate = self.winning_trades / self.total_trades if self.total_trades > 0 else 0.0
 
         # Profit calculations
         self.gross_profit = sum(t.pnl for t in trades if t.pnl > 0)
         self.gross_loss = sum(t.pnl for t in trades if t.pnl < 0)
         self.net_profit = self.final_balance - self.initial_balance
+
+        # Extremes
+        pnls = [t.pnl for t in trades]
+        self.max_win_trade = max(pnls) if pnls else 0.0
+        self.max_loss_trade = min(pnls) if pnls else 0.0
+
+        # Hit rate breakdown
+        self.tp_hit_count = sum(1 for t in trades if t.exit_reason and "TAKE_PROFIT" in t.exit_reason)
+        self.sl_hit_count = sum(1 for t in trades if t.exit_reason and "STOP_LOSS" in t.exit_reason)
+        self.tp_hit_rate = (self.tp_hit_count / self.total_trades * 100.0) if self.total_trades > 0 else 0.0
 
         # Average trade
         if self.winning_trades > 0:
@@ -134,9 +150,16 @@ class BacktestStats:
         if self.losing_trades > 0:
             self.avg_loss = abs(self.gross_loss / self.losing_trades)
 
+        # Mathematical Expectancy: E = (P_win * Avg_Win) - (P_loss * Avg_Loss)
+        p_win = self.win_rate
+        p_loss = 1.0 - p_win
+        self.expectancy = (p_win * self.avg_win) - (p_loss * self.avg_loss)
+
         # Profit factor
         if self.gross_loss != 0:
             self.profit_factor = abs(self.gross_profit / self.gross_loss)
+        elif self.gross_profit > 0:
+            self.profit_factor = 99.9
 
         # Duration
         durations = [t.duration_minutes for t in trades if t.duration_minutes > 0]
@@ -392,6 +415,12 @@ class BacktestEngine:
                 "avg_win": round(stats.avg_win, 2),
                 "avg_loss": round(stats.avg_loss, 2),
                 "profit_factor": round(stats.profit_factor, 2),
+                "expectancy": round(stats.expectancy, 2),
+                "max_win_trade": round(stats.max_win_trade, 2),
+                "max_loss_trade": round(stats.max_loss_trade, 2),
+                "tp_hit_count": stats.tp_hit_count,
+                "sl_hit_count": stats.sl_hit_count,
+                "tp_hit_rate": round(stats.tp_hit_rate, 2),
                 "max_drawdown": round(stats.max_drawdown, 2),
                 "max_drawdown_percent": round(stats.max_drawdown_percent, 2),
                 "sharpe_ratio": round(stats.sharpe_ratio, 2),

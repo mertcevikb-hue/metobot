@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metobot AI - Quantitative Terminal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- TradingView Lightweight Charts v4.1.3 -->
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root {
+  --site-bg: #5b0000;
+  --panel-bg: rgba(62, 0, 0, 0.88);
+  --btn-bg: #f8f8f8;
+  --btn-color: #5b0000;
+}
+.tab-hidden { display: none !important; }
+body {
+  background-color: #5b0000 !important;
+  background: radial-gradient(circle at 50% 0%, #760000 0%, #5b0000 55%, #380000 100%) fixed !important;
+  color: #f8f8f8 !important;
+}
+::-webkit-scrollbar { height: 6px; width: 6px; }
+::-webkit-scrollbar-track { background: #380000; }
+::-webkit-scrollbar-thumb { background: #8a0000; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #b30000; }
+
+.grid-panel {
+  background: rgba(62, 0, 0, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(16px);
+}
+
+/* UNIVERSAL BUTTON THEMING: #f8f8f8 BACKGROUND WITH #5b0000 TEXT */
+button, .btn {
+  background-color: #f8f8f8 !important;
+  color: #5b0000 !important;
+  border: 1px solid #f8f8f8 !important;
+  font-weight: 700 !important;
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}
+button:hover, .btn:hover {
+  background-color: #ffffff !important;
+  color: #3b0000 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.35) !important;
+}
+button:active, .btn:active {
+  background-color: #eaeaea !important;
+  transform: translateY(0);
+}
+button:disabled, .btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+button.btn-close, button.close-btn {
+  background-color: #f8f8f8 !important;
+  color: #5b0000 !important;
+  border-radius: 9999px !important;
+  width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+}
+
+/* FORM INPUT THEMING */
+input, select, textarea {
+  background-color: #380000 !important;
+  border-color: #780000 !important;
+  color: #f8f8f8 !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #f8f8f8 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px #f8f8f8 !important;
+}
+input::placeholder, textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+@keyframes flash-green { 0% { background: rgba(16, 185, 129, 0.35); } 100% { background: transparent; } }
+@keyframes flash-red { 0% { background: rgba(244, 63, 94, 0.35); } 100% { background: transparent; } }
+.price-up { animation: flash-green 1.2s ease-out; }
+.price-down { animation: flash-red 1.2s ease-out; }
+@keyframes slide-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.signal-new { animation: slide-in .4s ease-out; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* TOAST NOTIFICATION SYSTEM */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  width: calc(100vw - 48px);
+  pointer-events: none;
+}
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: rgba(58, 0, 0, 0.96) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: #f8f8f8 !important;
+  font-size: 12px;
+  line-height: 1.45;
+  animation: toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+.toast-item.toast-out {
+  animation: toast-out 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(16px) scale(0.95); }
+}
+.toast-success { border-left: 4px solid #10b981 !important; }
+.toast-error { border-left: 4px solid #f43f5e !important; }
+.toast-warning { border-left: 4px solid #f59e0b !important; }
+.toast-info { border-left: 4px solid #3b82f6 !important; }
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  opacity: 0.5;
+  animation: toast-prog 4s linear forwards;
+}
+.toast-success .toast-progress { background: #10b981; }
+.toast-error .toast-progress { background: #f43f5e; }
+.toast-warning .toast-progress { background: #f59e0b; }
+.toast-info .toast-progress { background: #3b82f6; }
+@keyframes toast-prog { from { width: 100%; } to { width: 0%; } }
+
+/* GAUGE BARS */
+.edge-bar-wrap {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+.edge-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+</style>
+</head>
+<body class="bg-[#5b0000] text-gray-100 font-sans antialiased min-h-screen flex">
+<aside class="w-64 bg-[#460000] border-r border-[#780000] flex flex-col justify-between p-4 shrink-0 shadow-2xl">
+  <div>
+    <div class="flex items-center space-x-3 px-2 mb-8 mt-2">
+      <div class="bg-[#f8f8f8] text-[#5b0000] p-2.5 rounded-xl font-black shadow-lg">M</div>
+      <div>
+        <span class="text-base font-extrabold tracking-wider text-white block">METOBOT <span class="text-white/80 font-normal">AI</span></span>
+        <span class="text-[10px] text-gray-300 tracking-widest block uppercase font-mono">QUANT TERMINAL v0.5</span>
+      </div>
+    </div>
+    <nav class="space-y-1.5 text-xs font-medium" id="sidebar-nav">
+      <a href="#" onclick="switchTab('dashboard');return false;" id="nav-dashboard" class="flex items-center space-x-3 px-3 py-3 rounded-xl bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md transition"><span>📊</span><span>Dashboard</span></a>
+      <a href="#" onclick="switchTab('stock');return false;" id="nav-stock" class="flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition"><span>📈</span><span>Stock Trading</span></a>
+      <a href="#" onclick="switchTab('options');return false;" id="nav-options" class="flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition"><span>🎯</span><span>Option Trading</span></a>
+      <a href="#" onclick="switchTab('etf');return false;" id="nav-etf" class="flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition"><span>🏛️</span><span>ETF Trading</span></a>
+      <a href="#" onclick="switchTab('ai');return false;" id="nav-ai" class="flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition"><span>✨</span><span>AI Assistant</span></a>
+      <a href="#" onclick="switchTab('settings');return false;" id="nav-settings" class="flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition"><span>⚙️</span><span>Settings</span></a>
+    </nav>
+  </div>
+  <div class="space-y-2.5">
+    <div class="p-3 bg-[#380000]/80 rounded-2xl border border-[#780000]/60 text-xs space-y-2">
+      <div class="flex items-center justify-between"><span class="text-gray-300">Quant Engine</span><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span><span class="text-emerald-300 font-bold">LIVE</span></span></div>
+      <div class="flex items-center justify-between"><span class="text-gray-300">Last Update</span><span id="sidebar-last-update" class="text-gray-300 text-[10px] font-mono">--:--:--</span></div>
+      <div class="flex items-center justify-between"><span class="text-gray-300">Market</span><span id="market-status-badge" class="text-[10px] font-mono text-gray-300">--</span></div>
+    </div>
+    <div class="text-center text-[11px] text-gray-300 flex items-center justify-center gap-1.5 py-1 font-medium">
+      <span>Made with</span>
+      <a href="https://www.linkedin.com/in/eray-g%C3%BCl%C3%BC%C3%A7men-704b0a32a/" target="_blank" rel="noopener noreferrer" class="text-[#f8f8f8] hover:underline font-bold transition inline-flex items-center gap-1">
+        <span>Eray</span>
+        <svg class="w-3 h-3 opacity-90 inline" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+      </a>
+    </div>
+  </div>
+</aside>
+<main class="flex-1 flex flex-col overflow-y-auto bg-transparent">
+  <header class="h-16 border-b border-[#780000]/80 flex items-center justify-between px-6 bg-[#5b0000]/90 backdrop-blur sticky top-0 z-10 shadow-sm">
+    <div><h1 id="header-title" class="text-lg font-bold text-white tracking-wide">Dashboard</h1><p id="header-desc" class="text-xs text-gray-300">Paper Portfolio &amp; System Overview</p></div>
+    <div class="flex items-center gap-3">
+      <div class="hidden xl:flex items-center gap-1.5 text-[10px] font-mono bg-[#380000]/80 border border-[#780000] px-3 py-1.5 rounded-xl text-gray-300 shadow-inner">
+        <span class="text-amber-400 font-bold">PRE</span> 12:00-16:30
+        <span class="text-gray-500">•</span>
+        <span class="text-emerald-400 font-bold">NORMAL</span> 16:30-23:00
+        <span class="text-gray-500">•</span>
+        <span class="text-purple-400 font-bold">AFTER</span> 23:00-03:00
+        <span class="text-gray-500">•</span>
+        <span class="text-rose-400 font-bold">CLOSED</span> 03:00-12:00
+        <span class="text-emerald-400 font-bold ml-1 bg-emerald-950/60 border border-emerald-800 px-1.5 py-0.5 rounded text-[9px]">GMT+3</span>
+      </div>
+      <span id="market-clock" class="text-xs text-gray-300 font-mono"></span>
+    </div>
+  </header>
+  <div class="p-6 space-y-6 max-w-screen-2xl mx-auto w-full">
+
+    <!-- 1. DASHBOARD -->
+    <div id="section-dashboard" class="space-y-6">
+      <!-- PAPER PORTFOLIO BANNER BAR -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid-panel p-5 relative overflow-hidden">
+          <p class="text-[11px] font-bold text-gray-300 uppercase tracking-wider">PAPER PORTFOLIO EQUITY</p>
+          <p id="port-equity" class="text-3xl font-black text-white mt-2">$100,000.00</p>
+          <div class="flex items-center justify-between text-xs text-gray-300 mt-1">
+            <span>Cash: <span id="port-cash" class="font-mono text-emerald-300 font-bold">$100,000.00</span></span>
+            <button onclick="resetPortfolioModal()" class="px-2 py-0.5 bg-[#f8f8f8] text-[#5b0000] text-[10px] rounded font-bold hover:bg-white transition shadow">Reset</button>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-gray-400 mt-2 pt-2 border-t border-[#780000]/40 font-mono">
+            <span>Risk/Trade: <span id="port-risk-trade-val" class="text-white font-bold">1.5% ($1,500)</span></span>
+            <span>Cooldown: <span id="port-cooldown-val" class="text-white font-bold">15m</span></span>
+          </div>
+        </div>
+        <div class="grid-panel p-5">
+          <div class="flex items-center justify-between">
+            <p class="text-[11px] font-bold text-gray-300 uppercase tracking-wider">OPEN CAPITAL EXPOSURE</p>
+            <span id="port-max-allocation" class="text-[10px] text-gray-400 font-mono font-bold">Max: 30% ($30,000)</span>
+          </div>
+          <p id="port-exposure" class="text-3xl font-black text-blue-300 mt-2">$0.00</p>
+          <div class="flex items-center justify-between text-xs text-gray-300 mt-1">
+            <span id="port-exposure-pct">0.0% of Capital</span>
+            <span id="port-open-count" class="font-bold text-white">0 Positions</span>
+          </div>
+        </div>
+        <div class="grid-panel p-5">
+          <p class="text-[11px] font-bold text-gray-300 uppercase tracking-wider">TODAY'S REALIZED P&amp;L</p>
+          <p id="port-daily-pnl" class="text-3xl font-black text-emerald-300 mt-2">$0.00</p>
+          <p class="text-xs text-gray-300 mt-1">Unrealized: <span id="port-unrealized-pnl" class="font-mono text-white">$0.00</span></p>
+        </div>
+        <div class="grid-panel p-5">
+          <p class="text-[11px] font-bold text-gray-300 uppercase tracking-wider">DAILY LOSS LIMIT (<span id="port-daily-loss-pct">5%</span>)</p>
+          <div class="flex items-center justify-between mt-2">
+            <span id="port-loss-limit-stat" class="text-lg font-black text-white">$0 / $5,000</span>
+            <span id="port-loss-limit-badge" class="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold font-mono">ACTIVE &amp; SAFE</span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2 mt-3 overflow-hidden">
+            <div id="port-loss-limit-bar" class="bg-emerald-400 h-2 rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PERFORMANCE ANALYTICS SUMMARY -->
+      <div class="grid-panel p-5">
+        <div class="flex items-center justify-between mb-3 border-b border-[#780000]/60 pb-2 flex-wrap gap-2">
+          <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">Performance Analytics <span class="text-[10px] text-gray-400 font-normal">Multi-Dimensional Quant Matrix</span></h3>
+          <span class="text-[10px] text-gray-400 font-mono" id="perf-sample-size">Sample: 0 Trades</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          <div class="p-3 bg-[#380000]/50 rounded-xl border border-[#780000]/40"><p class="text-[10px] text-gray-400 uppercase">WIN RATE</p><p id="perf-win-rate" class="text-2xl font-black text-white mt-1">0.0%</p></div>
+          <div class="p-3 bg-[#380000]/50 rounded-xl border border-[#780000]/40"><p class="text-[10px] text-gray-400 uppercase">PROFIT FACTOR</p><p id="perf-profit-factor" class="text-2xl font-black text-emerald-300 mt-1">0.00</p></div>
+          <div class="p-3 bg-[#380000]/50 rounded-xl border border-[#780000]/40"><p class="text-[10px] text-gray-400 uppercase">EXPECTANCY</p><p id="perf-expectancy" class="text-2xl font-black text-blue-300 mt-1">$0.00</p></div>
+          <div class="p-3 bg-[#380000]/50 rounded-xl border border-[#780000]/40"><p class="text-[10px] text-gray-400 uppercase">TOTAL TRADES</p><p id="perf-total-trades" class="text-2xl font-black text-amber-300 mt-1">0</p></div>
+        </div>
+      </div>
+
+      <!-- ACTIVE OPEN POSITIONS TABLE -->
+      <div class="grid-panel overflow-hidden">
+        <div class="p-5 border-b border-[#780000]/80 flex items-center justify-between flex-wrap gap-3 bg-[#380000]/50">
+          <h2 class="text-sm font-bold text-white uppercase flex items-center gap-2">Active Open Positions <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span></h2>
+          <button onclick="closeAllPositionsModal()" class="px-3.5 py-1.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">Close All Positions</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="border-b border-[#780000]/60 text-[10px] font-bold text-gray-300 uppercase bg-[#380000]/60">
+                <th class="py-3 px-4">TRADE ID</th>
+                <th class="py-3 px-4">INSTRUMENT</th>
+                <th class="py-3 px-4">SIDE</th>
+                <th class="py-3 px-4">QTY</th>
+                <th class="py-3 px-4">ENTRY</th>
+                <th class="py-3 px-4">CURRENT</th>
+                <th class="py-3 px-4">UNREALIZED P&amp;L</th>
+                <th class="py-3 px-4">OPENED AT</th>
+                <th class="py-3 px-4">DURATION</th>
+                <th class="py-3 px-4">STATE</th>
+                <th class="py-3 px-4 text-center">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="open-positions-body" class="divide-y divide-[#780000]/40 font-mono">
+              <tr><td colspan="11" class="py-6 text-center text-gray-400 font-sans">No active open positions. Bot is monitoring for approved setups.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VETO SHIELD AUDIT LOG & REJECTED SIGNALS -->
+      <div class="grid-panel overflow-hidden">
+        <div class="p-5 border-b border-[#780000]/80 flex items-center justify-between bg-[#380000]/50">
+          <h2 class="text-sm font-bold text-white uppercase flex items-center gap-2">🛡️ VETO Shield Audit Log <span class="text-[10px] bg-rose-950/80 text-rose-300 px-2 py-0.5 rounded border border-rose-800">Trade Engine Gatekeeper</span></h2>
+          <button onclick="loadRejectedSignals()" class="px-3.5 py-1.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">Refresh Audit</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-[#780000]/60 text-[10px] font-bold text-gray-300 uppercase bg-[#380000]/60">
+                <th class="py-3 px-4">TIME</th>
+                <th class="py-3 px-4">SYMBOL</th>
+                <th class="py-3 px-4">DIRECTION</th>
+                <th class="py-3 px-4">SCORE</th>
+                <th class="py-3 px-4">CONFIDENCE</th>
+                <th class="py-3 px-4">VETO REASON CODE</th>
+                <th class="py-3 px-4">DETAIL / EXPLANATION</th>
+              </tr>
+            </thead>
+            <tbody id="rejected-signals-body" class="divide-y divide-[#780000]/40 text-[11px]">
+              <tr><td colspan="7" class="py-6 text-center text-gray-400 font-sans">No vetoed signals recorded in this session.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- WATCHLIST TERMINAL -->
+      <div class="grid-panel overflow-hidden">
+        <div class="p-5 border-b border-[#780000]/80 flex items-center justify-between flex-wrap gap-3 bg-[#380000]/50">
+          <h2 class="text-sm font-bold text-white uppercase flex items-center gap-2">Watchlist Terminal <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span></h2>
+          <div class="flex gap-2">
+            <button onclick="openAddModal()" class="px-3.5 py-1.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">+ Add Symbol</button>
+            <button id="btn-refresh" onclick="manualRefresh()" class="px-3.5 py-1.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"><span id="btn-refresh-icon">↻</span> Refresh</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead><tr class="border-b border-[#780000]/60 text-[11px] font-bold text-gray-300 uppercase bg-[#380000]/60"><th class="py-3 px-5">SYMBOL</th><th class="py-3 px-5">PRICE</th><th class="py-3 px-5">24H CHANGE</th><th class="py-3 px-5">ACTIVE POSITION &amp; TIME</th><th class="py-3 px-5">MARKET STATUS</th><th class="py-3 px-4 text-center">REMOVE</th></tr></thead>
+            <tbody id="market-table-body" class="divide-y divide-[#780000]/40 text-xs font-medium"><tr><td colspan="6" class="py-6 text-center text-gray-400">Loading watchlist...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. STOCK TRADING (Dedicated Equity View with Lightweight Charts) -->
+    <div id="section-stock" class="tab-hidden space-y-6">
+      <div class="grid-panel p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-3 w-full md:w-auto">
+          <input type="text" id="stock-search-input" placeholder="Enter Symbol (e.g. NVDA, AAPL, MSFT, TSLA)" class="w-full md:w-72 bg-[#380000] border border-[#780000] rounded-xl px-4 py-2.5 text-xs font-mono text-gray-100 uppercase focus:outline-none focus:border-[#f8f8f8]" onkeypress="if(event.key==='Enter')loadStockAnalysis()">
+          <button onclick="loadStockAnalysis()" class="px-5 py-2.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">Analyze</button>
+        </div>
+        <!-- Quick Ticker Chips -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-[11px] text-gray-400">US Equities:</span>
+          <button onclick="setStockTicker('NVDA')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">NVDA</button>
+          <button onclick="setStockTicker('AAPL')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">AAPL</button>
+          <button onclick="setStockTicker('MSFT')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">MSFT</button>
+          <button onclick="setStockTicker('TSLA')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">TSLA</button>
+          <button onclick="setStockTicker('SPY')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">SPY</button>
+          <button onclick="setStockTicker('QQQ')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#f8f8f8] text-[#5b0000]">QQQ</button>
+          <span class="text-[11px] text-gray-400 ml-2 font-bold text-emerald-400">₺ BIST:</span>
+          <button onclick="setStockTicker('THYAO.IS')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#380000] hover:bg-[#5b0000] text-emerald-300 border border-emerald-800">THYAO.IS</button>
+          <button onclick="setStockTicker('TUPRS.IS')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#380000] hover:bg-[#5b0000] text-emerald-300 border border-emerald-800">TUPRS.IS</button>
+          <button onclick="setStockTicker('KCHOL.IS')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#380000] hover:bg-[#5b0000] text-emerald-300 border border-emerald-800">KCHOL.IS</button>
+          <button onclick="setStockTicker('ISCTR.IS')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#380000] hover:bg-[#5b0000] text-emerald-300 border border-emerald-800">ISCTR.IS</button>
+          <button onclick="setStockTicker('AKBNK.IS')" class="px-2.5 py-1 text-xs rounded-lg font-mono font-bold bg-[#380000] hover:bg-[#5b0000] text-emerald-300 border border-emerald-800">AKBNK.IS</button>
+        </div>
+      </div>
+
+      <!-- MAIN CHART & QUANT ENGINE SYNTHESIS -->
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <!-- Candlestick Chart Area (2 Cols) -->
+        <div class="grid-panel p-5 xl:col-span-2 flex flex-col">
+          <div class="flex items-center justify-between pb-3 mb-3 border-b border-[#780000] flex-wrap gap-2">
+            <div class="flex items-center gap-3">
+              <span id="chart-symbol-badge" class="text-base font-black text-white font-mono">NVDA</span>
+              <span id="chart-price-badge" class="text-base font-bold text-emerald-400 font-mono">$0.00</span>
+              <span id="chart-change-badge" class="text-xs font-mono text-emerald-400">+0.00%</span>
+            </div>
+
+            <!-- Timeframe Selector (1m, 5m, 15m, 1h, 4h, 1d) -->
+            <div class="flex items-center gap-1 bg-[#240000] p-1 rounded-xl border border-[#780000]" id="chart-timeframe-selector">
+              <button onclick="setChartInterval('1m')" id="chart-tf-1m" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition">1m</button>
+              <button onclick="setChartInterval('5m')" id="chart-tf-5m" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition">5m</button>
+              <button onclick="setChartInterval('15m')" id="chart-tf-15m" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition">15m</button>
+              <button onclick="setChartInterval('1h')" id="chart-tf-1h" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition">1h</button>
+              <button onclick="setChartInterval('4h')" id="chart-tf-4h" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition">4h</button>
+              <button onclick="setChartInterval('1d')" id="chart-tf-1d" class="px-2.5 py-1 text-[11px] rounded-lg bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md ring-1 ring-white transition">1d</button>
+            </div>
+
+            <!-- Indicator Legend -->
+            <div class="flex items-center gap-3 text-[10px] font-mono">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-[#38bdf8] inline-block"></span> 9 EMA</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-[#fbbf24] inline-block"></span> 21 EMA</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 bg-[#c084fc] inline-block"></span> VWAP</span>
+              <span class="text-gray-400">|</span>
+              <span class="text-emerald-400 font-bold">TP1 / TP2</span>
+              <span class="text-rose-400 font-bold">SL</span>
+            </div>
+          </div>
+          <!-- Chart Container -->
+          <div id="stock-chart-container" class="w-full rounded-xl overflow-hidden" style="height: 440px;"></div>
+        </div>
+
+        <!-- Directional Edge & Institutional Gating (1 Col) -->
+        <div class="space-y-4">
+          <!-- Directional Edge Gauge -->
+          <div class="grid-panel p-5">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider mb-3">Directional Edge Gauge</h3>
+            <div class="space-y-3 text-xs">
+              <div>
+                <div class="flex justify-between font-mono mb-1"><span>BULLISH PRESSURE</span><span id="gauge-bull-val" class="text-emerald-400 font-bold">0.0</span></div>
+                <div class="edge-bar-wrap"><div id="gauge-bull-fill" class="edge-bar-fill bg-emerald-400" style="width: 0%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between font-mono mb-1"><span>BEARISH PRESSURE</span><span id="gauge-bear-val" class="text-rose-400 font-bold">0.0</span></div>
+                <div class="edge-bar-wrap"><div id="gauge-bear-fill" class="edge-bar-fill bg-rose-400" style="width: 0%"></div></div>
+              </div>
+              <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center mt-2">
+                <span class="text-gray-300">Directional Edge:</span>
+                <span id="gauge-edge-val" class="font-mono text-base font-black text-white">+0.0</span>
+              </div>
+              <div class="flex items-center justify-between text-[11px] pt-1">
+                <span>Regime: <span id="gauge-regime-val" class="font-bold text-blue-300 font-mono">--</span></span>
+                <span>Strategy: <span id="gauge-strat-val" class="font-bold text-amber-300 font-mono">--</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Trade Engine Gatekeeper Card -->
+          <div class="grid-panel p-5">
+            <div class="flex items-center justify-between mb-3 border-b border-[#780000] pb-2">
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider">Trade Engine Gatekeeper</h3>
+              <span id="gate-decision-badge" class="px-2.5 py-0.5 rounded font-mono font-bold text-xs bg-gray-800 text-gray-300">NO TRADE</span>
+            </div>
+            <!-- 3-Tier Confidence Decomposition -->
+            <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+              <div class="p-2 bg-[#380000] rounded-lg border border-[#780000]"><p class="text-[9px] text-gray-400">DIRECTION</p><p id="gate-conf-dir" class="text-xs font-bold text-white font-mono mt-0.5">--</p></div>
+              <div class="p-2 bg-[#380000] rounded-lg border border-[#780000]"><p class="text-[9px] text-gray-400">SETUP</p><p id="gate-conf-setup" class="text-xs font-bold text-white font-mono mt-0.5">--</p></div>
+              <div class="p-2 bg-[#380000] rounded-lg border border-[#780000]"><p class="text-[9px] text-gray-400">EXECUTION</p><p id="gate-conf-exec" class="text-xs font-bold text-white font-mono mt-0.5">--</p></div>
+            </div>
+            <div class="p-2.5 bg-gray-900/60 rounded-xl border border-gray-700/60 mb-3 text-center">
+              <span class="text-[10px] text-gray-400 uppercase">MODEL CONFIDENCE: </span>
+              <span id="gate-model-conf" class="font-mono text-sm font-black text-amber-300">0.0%</span>
+              <span class="text-[10px] text-gray-500 font-mono"> (Min: 75%)</span>
+            </div>
+            <!-- Structured Explanation: WHY ENTERED / WHY REJECTED -->
+            <div class="p-3 rounded-xl bg-[#380000] border border-[#780000]">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1" id="gate-explanation-title">DECISION EXPLANATION</p>
+              <p id="gate-explanation-text" class="text-xs text-gray-200 font-mono leading-relaxed">No evaluation performed yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EQUITY QUANT TECHNICAL METRICS -->
+      <div class="grid-panel p-5">
+        <h3 class="text-xs font-bold text-white uppercase tracking-wider mb-4 border-b border-[#780000] pb-2">Technical Feature Decomposition</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs font-mono">
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">9/21 EMA SPREAD</p><p id="stat-ema-spread" class="text-sm font-bold text-white mt-1">--</p></div>
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">RSI (14)</p><p id="stat-rsi" class="text-sm font-bold text-white mt-1">--</p></div>
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">14-BAR ATR</p><p id="stat-atr" class="text-sm font-bold text-white mt-1">--</p></div>
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">VOLUME Z-SCORE</p><p id="stat-vol-z" class="text-sm font-bold text-white mt-1">--</p></div>
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">FVG DISTANCE</p><p id="stat-fvg-dist" class="text-sm font-bold text-white mt-1">--</p></div>
+          <div class="bg-[#380000] p-3 rounded-xl border border-[#780000]"><p class="text-[9px] text-gray-400 uppercase">EXP. HOLDING</p><p id="stat-holding-bars" class="text-sm font-bold text-white mt-1">--</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. OPTION TRADING (Dedicated Derivatives View with CBOE Chain) -->
+    <div id="section-options" class="tab-hidden space-y-6">
+      <div id="options-market-banner" class="hidden p-4 rounded-2xl border border-amber-800/60 bg-amber-950/25 flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+          <div>
+            <p class="text-xs font-bold text-amber-300" id="options-banner-title">Options Market is CLOSED</p>
+            <p class="text-[11px] text-gray-300 mt-0.5" id="options-banner-desc">Normal trading session: Monday-Friday 16:30 – 23:00 GMT+3 (Istanbul). Pre-Market: 12:00 – 16:30. Positions are blocked outside normal hours and force closed at 23:00.</p>
+          </div>
+        </div>
+        <span id="options-banner-countdown" class="px-3 py-1 bg-amber-950/80 text-amber-400 border border-amber-800 rounded-lg text-xs font-mono font-bold">Opens in --</span>
+      </div>
+      <div class="grid-panel p-6">
+        <h2 class="text-sm font-bold text-white uppercase mb-1">Quantitative Options Analysis Terminal</h2>
+        <p class="text-xs text-gray-300 mb-4">US Equities: Real-Time CBOE Options Chain + Greeks + Dynamic Exit Lifecycle</p>
+        <div class="flex items-center space-x-3 max-w-lg">
+          <input type="text" id="opt-symbol-input" placeholder="SPY, QQQ, NVDA, AAPL" class="flex-1 bg-[#380000] border border-[#780000] rounded-xl px-4 py-3 text-sm font-mono text-gray-100 uppercase focus:outline-none focus:border-[#f8f8f8]" onkeypress="if(event.key==='Enter')analyzeOptions()">
+          <button onclick="analyzeOptions()" class="px-6 py-3 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-sm font-bold transition shadow">Analyze Options</button>
+        </div>
+      </div>
+      <div id="opt-results-panel" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="grid-panel p-5">
+            <h3 class="text-xs font-bold text-white uppercase mb-4 border-b border-[#780000] pb-2 flex justify-between"><span>UNDERLYING (<span id="opt-res-symbol" class="text-emerald-300"></span>)</span><span id="opt-res-price" class="text-emerald-300 font-mono"></span></h3>
+            <div class="space-y-2 text-xs" id="opt-stock-metrics"></div>
+          </div>
+          <div class="grid-panel p-5 lg:col-span-2">
+            <h3 class="text-xs font-bold text-white uppercase mb-4 border-b border-[#780000] pb-2">CONTRACT &amp; RISK</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase tracking-wider">DECISION</p><p id="opt-res-dir" class="text-xl font-black text-white mt-1">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase tracking-wider">STRIKE</p><p id="opt-res-strike" class="text-lg font-bold text-white mt-1 font-mono">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase tracking-wider">PREMIUM</p><p id="opt-res-premium" class="text-lg font-bold text-white mt-1 font-mono">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase tracking-wider">EXPIRATION</p><p id="opt-res-exp" class="text-sm font-bold text-white mt-2 font-mono">-</p></div>
+            </div>
+            <div class="mb-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl p-3 flex justify-between text-xs flex-wrap gap-2">
+              <span><span class="text-emerald-400 font-bold">TYPE: </span><span id="opt-res-type" class="text-white font-mono font-bold">-</span></span>
+              <span><span class="text-gray-400">CONTRACT: </span><span id="opt-res-contract" class="text-emerald-300 font-mono">-</span></span>
+              <span id="opt-res-0dte-badge" class="hidden px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold font-mono">0DTE (13:30 ET CUTOFF)</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><h4 class="text-[10px] font-bold text-gray-400 uppercase mb-2">OPTION GREEKS &amp; LIQUIDITY</h4><div class="space-y-1 text-[11px]" id="opt-specific-metrics"></div></div>
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <h4 class="text-[10px] font-bold text-gray-400 uppercase">DYNAMIC EXIT ZONES (OPTION &amp; STOCK)</h4>
+                  <span id="opt-zone-protocol-badge" class="text-[9px] font-mono text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800">TIGHT RISK PROTOCOL</span>
+                </div>
+                <div class="space-y-2 text-xs">
+                  <!-- Option Premium Exit Targets -->
+                  <div class="bg-[#380000] p-2.5 rounded-xl border border-[#780000] space-y-1">
+                    <p class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Contract Premium Targets ($)</p>
+                    <div class="flex justify-between items-center"><span class="text-gray-300">Entry Premium:</span><span class="font-mono font-bold text-white" id="opt-zone-prem-entry">-</span></div>
+                    <div class="flex justify-between items-center"><span class="text-emerald-400">TP1 (+30% Premium):</span><span class="font-mono font-bold text-emerald-300" id="opt-zone-prem-tp1">-</span></div>
+                    <div class="flex justify-between items-center"><span class="text-emerald-300">TP2 (+70% Premium):</span><span class="font-mono font-bold text-emerald-400" id="opt-zone-prem-tp2">-</span></div>
+                    <div class="flex justify-between items-center border-t border-[#780000]/60 pt-1"><span class="text-rose-400">Hard Stop Loss (-25%):</span><span class="font-mono font-bold text-rose-300" id="opt-zone-prem-sl">-</span></div>
+                  </div>
+
+                  <!-- Tight Underlying Trigger Prices -->
+                  <div class="bg-gray-900/50 p-2.5 rounded-xl border border-gray-700/60 space-y-1">
+                    <p class="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Underlying Triggers (Tight Delta-Calibrated)</p>
+                    <div class="flex justify-between items-center"><span class="text-gray-400 text-[11px]">Stock Spot:</span><span class="font-mono text-gray-200" id="opt-zone-stock-entry">-</span></div>
+                    <div class="flex justify-between items-center"><span class="text-emerald-400 text-[11px]">Stock TP1 Trigger:</span><span class="font-mono text-emerald-300" id="opt-zone-stock-tp1">-</span></div>
+                    <div class="flex justify-between items-center"><span class="text-emerald-300 text-[11px]">Stock TP2 Trigger:</span><span class="font-mono text-emerald-400" id="opt-zone-stock-tp2">-</span></div>
+                    <div class="flex justify-between items-center border-t border-gray-700/60 pt-1"><span class="text-rose-400 text-[11px]">Stock SL Trigger:</span><span class="font-mono font-bold text-rose-300" id="opt-zone-stock-sl">-</span></div>
+                  </div>
+                  <p class="text-[10px] text-gray-400 leading-snug font-sans">
+                    ℹ️ <span class="text-gray-200">Option protection:</span> Underlying stop is tight (0.35–0.50 ATR) to avoid holding losing options while theta or IV collapses.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RECOMMENDED MULTI-LEG STRUCTURE & CONFLUENCE INTELLIGENCE PANEL -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Multi-Leg Strategy Structure -->
+          <div class="grid-panel p-5 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4 border-b border-[#780000] pb-2 flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🎯</span>
+                <h3 class="text-xs font-bold text-white uppercase tracking-wider">Recommended Option Strategy (Defined Risk)</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="opt-multi-strat-badge" class="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-bold text-[11px]">-</span>
+                <span id="opt-multi-type-badge" class="px-2.5 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800 font-mono text-[10px]">-</span>
+              </div>
+            </div>
+
+            <!-- Strategy Economics -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase">Net Debit / Credit</p><p id="opt-multi-cost" class="text-base font-bold text-white mt-1 font-mono">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase">Max Profit</p><p id="opt-multi-max-profit" class="text-base font-bold text-emerald-400 mt-1 font-mono">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase">Max Loss</p><p id="opt-multi-max-loss" class="text-base font-bold text-rose-400 mt-1 font-mono">-</p></div>
+              <div class="bg-[#380000] rounded-xl p-3 border border-[#780000]"><p class="text-[10px] text-gray-400 uppercase">Breakeven</p><p id="opt-multi-breakeven" class="text-base font-bold text-amber-300 mt-1 font-mono">-</p></div>
+            </div>
+
+            <!-- Multi-Leg Table -->
+            <div class="overflow-x-auto mb-3">
+              <table class="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr class="border-b border-[#780000] text-[10px] text-gray-400 uppercase bg-[#380000]/60">
+                    <th class="py-2 px-3">Leg</th>
+                    <th class="py-2 px-3">Action</th>
+                    <th class="py-2 px-3">Type</th>
+                    <th class="py-2 px-3">Strike</th>
+                    <th class="py-2 px-3">Est. Price</th>
+                  </tr>
+                </thead>
+                <tbody id="opt-multi-legs-tbody">
+                  <tr><td colspan="5" class="py-2 px-3 text-center text-gray-500">Evaluating multi-leg structure...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p id="opt-multi-explanation" class="text-[11px] text-gray-300 font-sans italic bg-black/20 p-2.5 rounded-lg border border-[#780000]/40"></p>
+          </div>
+
+          <!-- Confluence & 0DTE Risk Metrics Panel -->
+          <div class="grid-panel p-5 space-y-4">
+            <h3 class="text-xs font-bold text-white uppercase border-b border-[#780000] pb-2 flex justify-between items-center">
+              <span>Confluence &amp; 0DTE Edge</span>
+              <span id="opt-confluence-badge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">APPROVED</span>
+            </h3>
+
+            <!-- Confluence Score Progress -->
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-gray-300">Positive Confluence:</span>
+                <span id="opt-conf-score-val" class="font-bold text-emerald-300">0%</span>
+              </div>
+              <div class="w-full bg-[#380000] h-2 rounded-full overflow-hidden border border-[#780000]">
+                <div id="opt-conf-bar" class="h-full bg-emerald-400 transition-all" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Contradiction Penalty Progress -->
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-gray-300">Contradiction Penalty:</span>
+                <span id="opt-contra-penalty-val" class="font-bold text-rose-400">0 pts</span>
+              </div>
+              <div class="w-full bg-[#380000] h-2 rounded-full overflow-hidden border border-[#780000]">
+                <div id="opt-contra-bar" class="h-full bg-rose-500 transition-all" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- HTF Setup & 0DTE Greeks Details -->
+            <div class="space-y-2 text-xs font-mono pt-2 border-t border-[#780000]/60">
+              <div class="flex justify-between">
+                <span class="text-gray-400">HTF Pattern:</span>
+                <span id="opt-htf-pattern-val" class="text-amber-300 font-bold">NONE</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">0DTE Expected Move:</span>
+                <span id="opt-expected-move-val" class="text-emerald-300 font-bold">--</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Hourly Theta Decay:</span>
+                <span id="opt-theta-hourly-val" class="text-rose-400 font-bold">--</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Gamma Hazard:</span>
+                <span id="opt-gamma-risk-val" class="text-amber-400 font-bold">LOW</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Session Window:</span>
+                <span id="opt-time-bucket-val" class="text-blue-300 font-bold">MIDDAY</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROTATION GAUGE & POSITION STATE -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="grid-panel p-5">
+            <h3 class="text-xs font-bold text-white uppercase mb-3">Adverse Rotation Gauge</h3>
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between font-mono"><span>Counter-Trend Pressure:</span><span id="opt-rotation-score" class="font-bold text-white">0.0 / 100</span></div>
+              <div class="edge-bar-wrap"><div id="opt-rotation-bar" class="edge-bar-fill bg-emerald-400" style="width: 10%"></div></div>
+              <p class="text-[11px] text-gray-300 mt-2 font-mono" id="opt-rotation-stage">Stage: NORMAL_PULLBACK (Thesis intact)</p>
+            </div>
+          </div>
+          <div class="grid-panel p-5">
+            <h3 class="text-xs font-bold text-white uppercase mb-3">Quantity Scaling &amp; Lifecycle</h3>
+            <div class="space-y-2 text-xs font-mono">
+              <div class="flex justify-between"><span>Active State:</span><span id="opt-state-badge" class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">READY</span></div>
+              <p class="text-[11px] text-gray-300 pt-1">• 1 Contract: Breakeven Stop @ TP1 (No Partial Exit)</p>
+              <p class="text-[11px] text-gray-300">• 2 Contracts: 1 TP1 (50%), 1 Breakeven Runner</p>
+              <p class="text-[11px] text-gray-300">• 5-10 Contracts: 50% TP1, 30% TP2, 20% Runner</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-panel p-5 bg-blue-950/10"><h3 class="text-xs font-bold text-blue-400 uppercase mb-3">DECISION LOG</h3><div id="opt-reasoning" class="text-xs text-gray-300 leading-relaxed font-mono whitespace-pre-wrap"></div></div>
+
+        <!-- REAL EXECUTED TRADE HISTORY -->
+        <div class="grid-panel p-5">
+          <div class="flex items-center justify-between flex-wrap gap-3 mb-4 pb-3 border-b border-[#780000]">
+            <div class="flex items-center gap-2.5">
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider">Trade History</h3>
+              <span class="text-[10px] bg-emerald-950/60 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-800 font-mono">Executed Positions Only</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] flex-wrap" id="trade-filters">
+              <button onclick="setTradeFilter('ALL')" id="filter-btn-ALL" class="px-2.5 py-1 rounded-lg bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md ring-2 ring-white transition">All</button>
+              <button onclick="setTradeFilter('OPEN')" id="filter-btn-OPEN" class="px-2.5 py-1 rounded-lg bg-[#380000] text-gray-300 font-semibold border border-[#780000] hover:bg-[#5b0000] hover:text-white transition">Open</button>
+              <button onclick="setTradeFilter('CLOSED')" id="filter-btn-CLOSED" class="px-2.5 py-1 rounded-lg bg-[#380000] text-gray-300 font-semibold border border-[#780000] hover:bg-[#5b0000] hover:text-white transition">Closed</button>
+              <button onclick="setTradeFilter('CALL')" id="filter-btn-CALL" class="px-2.5 py-1 rounded-lg bg-[#380000] text-gray-300 font-semibold border border-[#780000] hover:bg-[#5b0000] hover:text-white transition">Calls</button>
+              <button onclick="setTradeFilter('PUT')" id="filter-btn-PUT" class="px-2.5 py-1 rounded-lg bg-[#380000] text-gray-300 font-semibold border border-[#780000] hover:bg-[#5b0000] hover:text-white transition">Puts</button>
+              <button onclick="loadTradeHistory()" class="px-2.5 py-1 rounded-lg bg-[#5b0000] text-white font-bold border border-[#780000] hover:bg-[#780000] transition ml-2">🔄 Refresh</button>
+              <button onclick="closeAllPositionsModal()" class="px-2.5 py-1 rounded-lg bg-rose-900/80 text-white font-bold border border-rose-700 hover:bg-rose-800 transition">⚠️ Close All Open</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead>
+                <tr class="border-b border-[#780000] text-[10px] text-gray-300 uppercase bg-[#380000]/60">
+                  <th class="py-2.5 px-3">Trade ID</th>
+                  <th class="py-2.5 px-3">Symbol</th>
+                  <th class="py-2.5 px-3">Type</th>
+                  <th class="py-2.5 px-3">Strike</th>
+                  <th class="py-2.5 px-3">Side</th>
+                  <th class="py-2.5 px-3">Entry</th>
+                  <th class="py-2.5 px-3">Exit</th>
+                  <th class="py-2.5 px-3">Opened At</th>
+                  <th class="py-2.5 px-3">Closed At</th>
+                  <th class="py-2.5 px-3">Duration</th>
+                  <th class="py-2.5 px-3">Status</th>
+                  <th class="py-2.5 px-3">P&L</th>
+                  <th class="py-2.5 px-3">Return</th>
+                  <th class="py-2.5 px-3">Exit Reason</th>
+                  <th class="py-2.5 px-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="trade-history-body" class="divide-y divide-[#780000]/40 text-[11px]">
+                <tr><td colspan="15" class="text-center text-gray-400 py-6 font-sans">No executed trades recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. ETF TRADING (Dedicated Basket & Macro View) -->
+    <div id="section-etf" class="tab-hidden space-y-6">
+      <div class="grid-panel p-6">
+        <h2 class="text-sm font-bold text-white uppercase mb-1">Macro ETF &amp; Sector Basket Terminal</h2>
+        <p class="text-xs text-gray-300">Macro indices, liquidity leaders, and sector rotation baskets</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- SPY Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">SPY</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 font-bold border border-emerald-800">S&amp;P 500</span>
+          </div>
+          <p class="text-xs text-gray-300">Primary US equity benchmark. Highest options liquidity.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('SPY')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('SPY')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+        <!-- QQQ Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">QQQ</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-blue-950 text-blue-400 font-bold border border-blue-800">NASDAQ 100</span>
+          </div>
+          <p class="text-xs text-gray-300">Mega-cap tech and growth index. High volatility edge.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('QQQ')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('QQQ')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+        <!-- IWM Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">IWM</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-amber-950 text-amber-400 font-bold border border-amber-800">RUSSELL 2000</span>
+          </div>
+          <p class="text-xs text-gray-300">US Small Cap equity index. Sensitive to monetary policy.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('IWM')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('IWM')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+        <!-- DIA Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">DIA</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-purple-950 text-purple-400 font-bold border border-purple-800">DOW JONES</span>
+          </div>
+          <p class="text-xs text-gray-300">30 blue-chip US industrials and value leaders.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('DIA')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('DIA')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+        <!-- SOXL Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">SOXL</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-rose-950 text-rose-300 font-bold border border-rose-800">SEMI BULL 3X</span>
+          </div>
+          <p class="text-xs text-gray-300">Triple-leveraged semiconductor momentum basket.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('SOXL')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('SOXL')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+        <!-- XLF Card -->
+        <div class="grid-panel p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-base font-black text-white font-mono">XLF</span>
+            <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 font-bold border border-emerald-800">FINANCIALS</span>
+          </div>
+          <p class="text-xs text-gray-300">Major banks, insurance, and asset management giants.</p>
+          <div class="flex items-center justify-between pt-2 border-t border-[#780000]/60">
+            <button onclick="setStockTicker('XLF')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">Analyze Stock</button>
+            <button onclick="setOptionTicker('XLF')" class="px-3 py-1.5 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-lg shadow">View Options</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. AI ASSISTANT (Preserved Gemini Strategist) -->
+    <div id="section-ai" class="tab-hidden">
+      <div class="grid-panel w-full max-w-3xl mx-auto flex flex-col overflow-hidden" style="height:620px">
+        <div class="flex items-center justify-between p-4 border-b border-[#780000] bg-[#380000]/50">
+          <div class="flex items-center space-x-3"><div class="w-8 h-8 rounded-xl bg-[#f8f8f8] text-[#5b0000] flex items-center justify-center font-bold shadow-md">AI</div><div><h3 class="text-xs font-bold text-white uppercase tracking-wide">Metobot AI Assistant</h3><p class="text-[10px] text-emerald-300 font-mono">Gemini Quantitative Options Reasoning</p></div></div>
+          <span id="ai-status-badge" class="px-2 py-0.5 bg-emerald-950/60 text-emerald-400 border border-emerald-800 rounded text-[10px] font-mono">READY</span>
+        </div>
+        <div id="chat-messages" class="flex-1 p-5 overflow-y-auto space-y-4 text-xs">
+          <div class="flex items-start space-x-3">
+            <div class="w-7 h-7 rounded-lg bg-[#f8f8f8] text-[#5b0000] flex items-center justify-center shrink-0 font-bold text-xs shadow-sm">AI</div>
+            <div class="bg-[#380000] border border-[#780000] rounded-2xl p-3 text-gray-100 max-w-prose leading-relaxed">Greetings! I am your algorithmic execution and options trading assistant. I specialize in US Equities (SPY, QQQ, NVDA, AAPL), SMC market structure analysis, and options chain risk management.<br><span class="text-gray-400 text-[10px]">Connected via Gemini Quantitative Flash Engine.</span></div>
+          </div>
+        </div>
+        <div class="p-4 border-t border-[#780000] bg-[#380000]/50 flex items-center space-x-2">
+          <input type="text" id="chat-input" placeholder="Ask a quantitative question or request Pine Script / Python code..." class="flex-1 bg-[#380000] border border-[#780000] rounded-xl px-4 py-3 text-xs text-gray-100 focus:outline-none focus:border-[#f8f8f8]" onkeypress="if(event.key==='Enter')sendChatMessage()">
+          <button onclick="sendChatMessage()" class="px-6 py-3 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. SETTINGS (Paper Trading & Engine Parameters) -->
+    <div id="section-settings" class="tab-hidden space-y-6">
+      <!-- PAPER TRADING & PORTFOLIO SETTINGS -->
+      <div class="grid-panel p-6">
+        <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 pb-2 border-b border-[#780000]">Paper Portfolio Parameters</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Starting Balance ($)</label>
+            <input type="number" id="setting-starting-balance" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="100000">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Risk Per Trade (%)</label>
+            <input type="number" step="0.5" id="setting-risk-pct" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="2.0">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Max Capital Allocation (%)</label>
+            <input type="number" step="5" id="setting-exposure-pct" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="85.0">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Daily Loss Limit (%)</label>
+            <input type="number" step="0.5" id="setting-daily-loss-pct" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="5.0">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Post-Exit Cooldown (Minutes)</label>
+            <input type="number" id="setting-cooldown-min" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="15">
+          </div>
+          <div class="flex items-end">
+            <button onclick="resetPortfolioModal()" id="btn-reset-portfolio" class="w-full py-2.5 bg-[#f8f8f8] text-[#5b0000] font-bold rounded-xl shadow">Reset Portfolio</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRADE ENGINE GATEKEEPER & RISK PARAMETERS -->
+      <div class="grid-panel p-6">
+        <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 pb-2 border-b border-[#780000]">Trade Engine &amp; Dynamic Exit Controls</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Min Model Confidence (%)</label>
+            <input type="number" step="1" id="setting-min-conf" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="75.0">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Min Directional Edge (Points)</label>
+            <input type="number" step="1" id="setting-min-edge" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="15.0">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">TP1 Multiple (x ATR)</label>
+            <input type="number" step="0.25" id="setting-tp1-mult" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="1.75">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">TP2 Multiple (x ATR)</label>
+            <input type="number" step="0.25" id="setting-tp2-mult" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="3.50">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Hard Stop Loss (x ATR)</label>
+            <input type="number" step="0.25" id="setting-hard-sl" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="1.75">
+          </div>
+          <div>
+            <label class="block text-gray-400 text-[11px] mb-1">Profit Protection Buffer (x ATR)</label>
+            <input type="number" step="0.05" id="setting-buffer-atr" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-2.5 font-mono" value="0.15">
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button onclick="saveSettings()" class="px-6 py-2.5 bg-[#f8f8f8] hover:bg-white text-[#5b0000] rounded-xl text-xs font-bold transition shadow">Save Configuration</button>
+        </div>
+      </div>
+
+      <!-- SYSTEM DIAGNOSTICS -->
+      <div class="grid-panel p-6">
+        <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 pb-2 border-b border-[#780000]">System Components &amp; Architecture</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>Engine Core:</span><span class="text-emerald-300 font-bold">QuantEngine 0.5</span></div>
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>Gatekeeper:</span><span class="text-emerald-300 font-bold">TradeEngine (9 Gates)</span></div>
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>Exit System:</span><span class="text-emerald-300 font-bold">3-Layer Dynamic</span></div>
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>Database:</span><span class="text-emerald-300 font-bold">SQLite aiosqlite</span></div>
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>Realtime Feeds:</span><span class="text-emerald-300 font-bold">Yahoo + CBOE Live</span></div>
+          <div class="p-3 bg-[#380000] rounded-xl border border-[#780000] flex justify-between items-center"><span>AI Provider:</span><span class="text-emerald-300 font-bold">Gemini 3.7 Flash</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="pt-6 pb-2 text-center text-xs text-gray-400 border-t border-[#780000]/40">
+      Made with <a href="https://www.linkedin.com/in/eray-g%C3%BCl%C3%BC%C3%A7men-704b0a32a/" target="_blank" rel="noopener noreferrer" class="text-[#f8f8f8] hover:underline font-bold transition">Eray</a>
+    </footer>
+
+  </div>
+</main>
+
+<!-- ADD SYMBOL MODAL -->
+<div id="add-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+  <div class="grid-panel w-full max-w-md p-6 relative">
+    <button onclick="closeAddModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">&times;</button>
+    <h3 class="text-sm font-bold text-white uppercase mb-1">Add Symbol to Watchlist</h3>
+    <p class="text-xs text-gray-300 mb-4">Enter ticker symbol (e.g. NVDA, AAPL, SPY, THYAO.IS)</p>
+    <input type="text" id="modal-symbol-input" placeholder="TICKER" class="w-full bg-[#380000] border border-[#780000] rounded-xl p-3 font-mono text-sm uppercase mb-4" onkeypress="if(event.key==='Enter')submitAddSymbol()">
+    <div class="flex justify-end gap-2">
+      <button onclick="closeAddModal()" class="px-4 py-2 bg-transparent border border-gray-600 text-gray-300 text-xs rounded-xl font-bold">Cancel</button>
+      <button onclick="submitAddSymbol()" class="px-5 py-2 bg-[#f8f8f8] text-[#5b0000] text-xs font-bold rounded-xl shadow">Add Symbol</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<script>
+// ==========================================
+// CLIENT-SIDE ROUTING & STATE MANAGEMENT
+// ==========================================
+var TAB_IDS = ['dashboard', 'stock', 'options', 'etf', 'ai', 'settings'];
+var TAB_INFO = {
+  dashboard: ['Dashboard', 'Paper Portfolio & System Overview'],
+  stock: ['Stock Trading', 'Equity Quant Analysis & Lightweight Charts'],
+  options: ['Option Trading', 'Derivatives & Real-Time CBOE Options Chain'],
+  etf: ['ETF Trading', 'Macro Baskets & Sector Indexes'],
+  ai: ['AI Assistant', 'Gemini Quantitative Strategy Analyst'],
+  settings: ['Settings', 'Paper Trading & Engine Parameters']
+};
+var currentTab = 'dashboard';
+var prevPrices = {};
+var currentFilter = 'ALL';
+var currentStockTicker = 'NVDA';
+var currentOptionTicker = 'SPY';
+var currentChartInterval = '1d';
+var allTradesCache = [];
+
+// ==========================================
+// CURRENCY & BIST LOCALIZATION HELPERS
+// ==========================================
+function isBist(symbol) {
+  if (!symbol) return false;
+  var s = String(symbol).trim().toUpperCase();
+  return s.endsWith('.IS') || s.includes('TRY') || s.includes('BIST');
+}
+
+function getCurrencySymbol(symbol) {
+  return isBist(symbol) ? '₺' : '$';
+}
+
+function formatCurrency(amount, symbol, decimals) {
+  if (amount === null || amount === undefined || isNaN(amount)) return '--';
+  var dec = (decimals !== undefined) ? decimals : 2;
+  var sym = getCurrencySymbol(symbol);
+  var num = Number(amount);
+  return (num < 0 ? '-' : '') + sym + Math.abs(num).toFixed(dec);
+}
+
+// TradingView Lightweight Chart Instance
+var stockChart = null;
+var candleSeries = null;
+var ema9Line = null;
+var ema21Line = null;
+var vwapLine = null;
+var tradePriceLines = [];
+
+function switchTab(id) {
+  currentTab = id;
+  TAB_IDS.forEach(function(t) {
+    var s = document.getElementById('section-' + t);
+    var n = document.getElementById('nav-' + t);
+    if (s) s.classList.toggle('tab-hidden', t !== id);
+    if (n) {
+      n.className = t === id
+        ? 'flex items-center space-x-3 px-3 py-3 rounded-xl bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md transition'
+        : 'flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-300 hover:bg-[#700000]/60 hover:text-white transition';
+    }
+  });
+  var info = TAB_INFO[id] || ['', ''];
+  document.getElementById('header-title').innerText = info[0];
+  document.getElementById('header-desc').innerText = info[1];
+
+  if (id === 'stock') {
+    setTimeout(function() { loadStockAnalysis(); }, 50);
+  }
+  if (id === 'options') {
+    loadTradeHistory();
+  }
+  if (id === 'settings') {
+    loadSettings();
+  }
+  if (id === 'dashboard') {
+    loadPortfolioStatus();
+    loadPerformanceAnalytics();
+    loadRejectedSignals();
+  }
+}
+
+// ==========================================
+// CLOCK & SESSION TIME WATCHDOG (GMT+3 ISTANBUL)
+// ==========================================
+function updateClock() {
+  var now = new Date();
+  var utcH = now.getUTCHours();
+  var utcM = now.getUTCMinutes();
+  var utcS = now.getUTCSeconds();
+  var totalUtcSec = utcH * 3600 + utcM * 60 + utcS;
+  var totalGmt3Sec = (totalUtcSec + 3 * 3600) % 86400;
+  var gmt3H = Math.floor(totalGmt3Sec / 3600);
+
+  var normalStart = 16 * 3600 + 30 * 60;
+  var normalEnd = 23 * 3600;
+  var isSessionOpen = (totalGmt3Sec >= normalStart && totalGmt3Sec < normalEnd);
+
+  var utcStr = (utcH < 10 ? '0' : '') + utcH + ':' + (utcM < 10 ? '0' : '') + utcM + ':' + (utcS < 10 ? '0' : '') + utcS + ' UTC';
+  var gmt3Str = (gmt3H < 10 ? '0' : '') + gmt3H + ':' + (utcM < 10 ? '0' : '') + utcM + ':' + (utcS < 10 ? '0' : '') + utcS + ' GMT+3';
+  var statusText = isSessionOpen ? '<span class="text-emerald-400 font-bold">NORMAL SESSION (OPEN)</span>' : '<span class="text-rose-400 font-bold">MARKET CLOSED</span>';
+
+  var clockEl = document.getElementById('market-clock');
+  if (clockEl) clockEl.innerHTML = utcStr + ' | <span class="text-white font-bold">' + gmt3Str + '</span> | ' + statusText;
+  var badgeEl = document.getElementById('market-status-badge');
+  if (badgeEl) badgeEl.innerHTML = isSessionOpen ? '<span class="text-emerald-400 font-bold">OPEN</span>' : '<span class="text-rose-400 font-bold">CLOSED</span>';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ==========================================
+// TOAST NOTIFICATIONS
+// ==========================================
+function showToast(message, type, title) {
+  type = type || 'info';
+  var container = document.getElementById('toast-container');
+  if (!container) return;
+  var toast = document.createElement('div');
+  toast.className = 'toast-item toast-' + type;
+  toast.innerHTML = '<div class="flex-1"><strong>' + (title || '') + '</strong><div>' + message + '</div></div><button class="close-btn" onclick="this.parentElement.remove()">&times;</button><div class="toast-progress"></div>';
+  container.appendChild(toast);
+  setTimeout(function() { if (toast && toast.parentElement) toast.remove(); }, 4000);
+}
+
+// ==========================================
+// LIGHTWEIGHT CHARTS INTEGRATION
+// ==========================================
+function initStockChart() {
+  var container = document.getElementById('stock-chart-container');
+  if (!container) return;
+  if (stockChart) return;
+
+  stockChart = LightweightCharts.createChart(container, {
+    layout: {
+      background: { color: 'rgba(45, 0, 0, 0.85)' },
+      textColor: '#e5e7eb',
+      fontSize: 11,
+      fontFamily: 'monospace'
+    },
+    grid: {
+      vertLines: { color: 'rgba(120, 0, 0, 0.35)' },
+      horzLines: { color: 'rgba(120, 0, 0, 0.35)' }
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: 'rgba(120, 0, 0, 0.6)' },
+    timeScale: { borderColor: 'rgba(120, 0, 0, 0.6)', timeVisible: true }
+  });
+
+  candleSeries = stockChart.addCandlestickSeries({
+    upColor: '#10b981',
+    downColor: '#f43f5e',
+    borderVisible: false,
+    wickUpColor: '#10b981',
+    wickDownColor: '#f43f5e'
+  });
+
+  ema9Line = stockChart.addLineSeries({ color: '#38bdf8', lineWidth: 1.5, title: 'EMA 9' });
+  ema21Line = stockChart.addLineSeries({ color: '#fbbf24', lineWidth: 1.5, title: 'EMA 21' });
+  vwapLine = stockChart.addLineSeries({ color: '#c084fc', lineWidth: 2, title: 'VWAP' });
+
+  window.addEventListener('resize', function() {
+    if (stockChart && container) stockChart.applyOptions({ width: container.clientWidth });
+  });
+}
+
+function setChartInterval(tf) {
+  currentChartInterval = tf;
+  var tfs = ['1m', '5m', '15m', '1h', '4h', '1d'];
+  tfs.forEach(function(t) {
+    var btn = document.getElementById('chart-tf-' + t);
+    if (btn) {
+      if (t === tf) {
+        btn.className = 'px-2.5 py-1 text-[11px] rounded-lg bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md ring-1 ring-white transition';
+      } else {
+        btn.className = 'px-2.5 py-1 text-[11px] rounded-lg bg-[#380000] text-gray-300 font-mono hover:bg-[#5b0000] hover:text-white transition';
+      }
+    }
+  });
+  loadChartOnly(currentStockTicker, tf);
+}
+
+function loadChartOnly(sym, interval) {
+  var tf = interval || currentChartInterval || '1d';
+  initStockChart();
+  fetch('/api/v1/chart-data/' + encodeURIComponent(sym) + '?interval=' + encodeURIComponent(tf))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.bars && d.bars.length && candleSeries) {
+        candleSeries.setData(d.bars);
+        if (d.ema9 && ema9Line) ema9Line.setData(d.ema9);
+        if (d.ema21 && ema21Line) ema21Line.setData(d.ema21);
+        if (d.vwap && vwapLine) vwapLine.setData(d.vwap);
+
+        // Price overlays
+        tradePriceLines.forEach(function(l) { candleSeries.removePriceLine(l); });
+        tradePriceLines = [];
+
+        if (d.active_trade) {
+          var at = d.active_trade;
+          if (at.entry_price) {
+            tradePriceLines.push(candleSeries.createPriceLine({ price: at.entry_price, color: '#38bdf8', lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'ENTRY' }));
+          }
+          if (at.tp1) {
+            tradePriceLines.push(candleSeries.createPriceLine({ price: at.tp1, color: '#10b981', axisLabelVisible: true, title: 'TP1' }));
+          }
+          if (at.tp2) {
+            tradePriceLines.push(candleSeries.createPriceLine({ price: at.tp2, color: '#059669', axisLabelVisible: true, title: 'TP2' }));
+          }
+          if (at.stop_loss) {
+            tradePriceLines.push(candleSeries.createPriceLine({ price: at.stop_loss, color: '#f43f5e', axisLabelVisible: true, title: 'SL' }));
+          }
+        }
+        stockChart.timeScale().fitContent();
+      }
+    })
+    .catch(function(e) { console.warn('Chart fetch error:', e); });
+}
+
+function loadStockAnalysis(symOverride) {
+  var sym = (symOverride || document.getElementById('stock-search-input').value || currentStockTicker).trim().toUpperCase();
+  if (!sym) return;
+  currentStockTicker = sym;
+  document.getElementById('stock-search-input').value = sym;
+  document.getElementById('chart-symbol-badge').innerText = sym;
+
+  initStockChart();
+
+  // 1. Fetch Chart Data & Overlays for active interval
+  loadChartOnly(sym, currentChartInterval);
+
+  // 2. Fetch Quant Engine Synthesis
+  fetch('/api/v1/stock-analysis/' + encodeURIComponent(sym))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.error) {
+        showToast(res.error, 'error', 'Analysis Error');
+        return;
+      }
+      var p = res.price || 0.0;
+      document.getElementById('chart-price-badge').innerText = formatCurrency(p, sym);
+
+      var bull = res.bullish_score || 0.0;
+      var bear = res.bearish_score || 0.0;
+      var edge = res.direction_edge || 0.0;
+      document.getElementById('gauge-bull-val').innerText = bull.toFixed(1);
+      document.getElementById('gauge-bear-val').innerText = bear.toFixed(1);
+      document.getElementById('gauge-bull-fill').style.width = bull + '%';
+      document.getElementById('gauge-bear-fill').style.width = bear + '%';
+
+      var edgeEl = document.getElementById('gauge-edge-val');
+      edgeEl.innerText = (edge >= 0 ? '+' : '') + edge.toFixed(1) + ' (' + (res.directional_bias || 'NEUTRAL') + ')';
+      edgeEl.className = 'font-mono text-base font-black ' + (edge > 0 ? 'text-emerald-400' : (edge < 0 ? 'text-rose-400' : 'text-gray-300'));
+
+      document.getElementById('gauge-regime-val').innerText = res.regime || '--';
+      document.getElementById('gauge-strat-val').innerText = res.strategy || '--';
+
+      // Gatekeeper Card
+      var te = res.trade_evaluation || {};
+      var dec = te.verdict || res.quant_synthesis?.decision || 'NO TRADE';
+      var badge = document.getElementById('gate-decision-badge');
+      badge.innerText = dec;
+      badge.className = 'px-2.5 py-0.5 rounded font-mono font-bold text-xs ' + 
+        (dec === 'LONG' || dec === 'BUY' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+        (dec === 'SHORT' || dec === 'SELL' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-gray-800 text-gray-300 border border-gray-700'));
+
+      var conf = res.confidence || {};
+      document.getElementById('gate-conf-dir').innerText = (conf.direction_confidence || 0).toFixed(0) + '%';
+      document.getElementById('gate-conf-setup').innerText = (conf.setup_confidence || 0).toFixed(0) + '%';
+      document.getElementById('gate-conf-exec').innerText = (conf.execution_confidence || 0).toFixed(0) + '%';
+      document.getElementById('gate-model-conf').innerText = (conf.model_confidence || 0).toFixed(1) + '%';
+
+      document.getElementById('gate-explanation-text').innerText = te.decision_explanation || 'Candidate evaluated through 9 institutional gates.';
+
+      // Features
+      var f = res.quant_synthesis?.features || {};
+      var se = res.stock_evaluation || {};
+      document.getElementById('stat-ema-spread').innerText = se.ema_spread ? (se.ema_spread >= 0 ? '+' : '') + se.ema_spread.toFixed(2) : '--';
+      document.getElementById('stat-rsi').innerText = f.rsi ? f.rsi.toFixed(1) : '--';
+      document.getElementById('stat-atr').innerText = se.atr_value ? formatCurrency(se.atr_value, sym) + ' (' + se.atr_pct_of_price + '%)' : '--';
+      document.getElementById('stat-vol-z').innerText = f.z_volume ? f.z_volume.toFixed(2) : '--';
+      document.getElementById('stat-fvg-dist').innerText = se.fvg_distance ? se.fvg_distance + ' ATR' : '--';
+      document.getElementById('stat-holding-bars').innerText = se.holding_bars_expected || '15-25 bars';
+    });
+}
+
+function setStockTicker(t) {
+  switchTab('stock');
+  loadStockAnalysis(t);
+}
+
+function setOptionTicker(t) {
+  switchTab('options');
+  document.getElementById('opt-symbol-input').value = t;
+  analyzeOptions();
+}
+
+// ==========================================
+// PORTFOLIO STATUS & REJECTED SIGNALS
+// ==========================================
+var currentPortfolioStartingBalance = 100000;
+
+function loadPortfolioStatus() {
+  fetch('/api/v1/portfolio')
+    .then(function(r) { return r.json(); })
+    .then(function(p) {
+      currentPortfolioStartingBalance = Number(p.starting_balance || 100000);
+      document.getElementById('port-equity').innerText = '$' + Number(p.total_equity || p.starting_balance || 100000).toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('port-cash').innerText = '$' + Number(p.available_cash || 100000).toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('port-exposure').innerText = '$' + Number(p.open_exposure || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+      
+      var expPct = (p.open_exposure_pct !== undefined) ? p.open_exposure_pct : (p.exposure_pct || 0);
+      document.getElementById('port-exposure-pct').innerText = expPct.toFixed(1) + '% of Capital';
+      
+      var openCount = (p.open_positions_count !== undefined) ? p.open_positions_count : (p.open_position_count || 0);
+      document.getElementById('port-open-count').innerText = openCount + ' Positions';
+
+      // Max capital allocation indicator
+      var maxAllocPct = (p.max_capital_allocation_pct !== undefined) ? p.max_capital_allocation_pct : (p.max_exposure_pct || 30.0);
+      var maxAllocAmt = p.max_capital_allocation_amount || (currentPortfolioStartingBalance * (maxAllocPct / 100.0));
+      var maxAllocEl = document.getElementById('port-max-allocation');
+      if (maxAllocEl) {
+        maxAllocEl.innerText = 'Max: ' + maxAllocPct.toFixed(0) + '% ($' + Math.round(maxAllocAmt).toLocaleString('en-US') + ')';
+      }
+
+      // Risk per trade & cooldown indicators
+      var riskPct = (p.risk_per_trade_pct !== undefined) ? p.risk_per_trade_pct : 1.5;
+      var riskAmt = p.risk_per_trade_amount || (currentPortfolioStartingBalance * (riskPct / 100.0));
+      var riskEl = document.getElementById('port-risk-trade-val');
+      if (riskEl) {
+        riskEl.innerText = riskPct.toFixed(1) + '% ($' + Math.round(riskAmt).toLocaleString('en-US') + ')';
+      }
+      var coolEl = document.getElementById('port-cooldown-val');
+      if (coolEl) {
+        coolEl.innerText = (p.cooldown_minutes || 15) + 'm';
+      }
+
+      // Update Settings Reset button label if present
+      var btnReset = document.getElementById('btn-reset-portfolio');
+      if (btnReset) {
+        btnReset.innerText = 'Reset Portfolio to $' + Math.round(currentPortfolioStartingBalance).toLocaleString('en-US');
+      }
+
+      var dpnl = p.daily_pnl || 0.0;
+      var dpnlEl = document.getElementById('port-daily-pnl');
+      dpnlEl.innerText = (dpnl >= 0 ? '+$' : '-$') + Math.abs(dpnl).toFixed(2);
+      dpnlEl.className = 'text-3xl font-black mt-2 ' + (dpnl >= 0 ? 'text-emerald-300' : 'text-rose-400');
+
+      var upnl = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl : (p.total_unrealized_pnl || 0.0);
+      var upnlEl = document.getElementById('port-unrealized-pnl');
+      upnlEl.innerText = (upnl >= 0 ? '+$' : '-$') + Math.abs(upnl).toFixed(2);
+      upnlEl.className = 'font-mono font-bold ' + (upnl >= 0 ? 'text-emerald-300' : 'text-rose-400');
+
+      // Daily Loss Limit connection
+      var lossPctSetting = (p.daily_loss_limit_pct !== undefined) ? p.daily_loss_limit_pct : 5.0;
+      var lossLimitTitleEl = document.getElementById('port-daily-loss-pct');
+      if (lossLimitTitleEl) {
+        lossLimitTitleEl.innerText = lossPctSetting.toFixed(1).replace('.0', '') + '%';
+      }
+
+      var lossCur = Math.max(0, -dpnl);
+      var lossMax = p.daily_loss_limit_amount || (currentPortfolioStartingBalance * (lossPctSetting / 100.0));
+      document.getElementById('port-loss-limit-stat').innerText = '$' + lossCur.toFixed(0) + ' / $' + lossMax.toFixed(0);
+      var lossBar = document.getElementById('port-loss-limit-bar');
+      var lossPct = lossMax > 0 ? Math.min(100, (lossCur / lossMax) * 100) : 0;
+      lossBar.style.width = lossPct + '%';
+      lossBar.className = lossPct > 80 ? 'bg-rose-500 h-2 rounded-full' : 'bg-emerald-400 h-2 rounded-full';
+
+      var badgeEl = document.getElementById('port-loss-limit-badge');
+      if (badgeEl) {
+        if (p.is_daily_loss_breached || lossCur >= lossMax) {
+          badgeEl.innerText = 'BREACHED / HALTED';
+          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold font-mono animate-pulse';
+        } else {
+          badgeEl.innerText = 'ACTIVE & SAFE';
+          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold font-mono';
+        }
+      }
+
+      // Load open positions table
+      fetch('/api/v1/trades?status=OPEN')
+        .then(function(tr) { return r = tr.json(); return r; })
+        .then(function(openTrades) {
+          var tbody = document.getElementById('open-positions-body');
+          if (!openTrades || !openTrades.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="py-6 text-center text-gray-400 font-sans">No active open positions. Bot is monitoring for approved setups.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = openTrades.map(function(t) {
+            var up = t.unrealized_pnl || 0;
+            var upClass = up >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            var sideColor = (t.side === 'LONG' || t.side === 'BUY' || t.side === 'CALL') ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+            var sym = t.symbol || '';
+            var openTime = t.opened_time_display || (t.date_str ? t.date_str + ' ' + (t.time_session || '') : (t.created_at ? t.created_at.substring(0, 16).replace('T', ' ') : '—'));
+            var dur = t.duration_str || '—';
+            return '<tr>' +
+              '<td class="py-2.5 px-4 font-mono text-gray-300">' + (t.trade_id || '').substring(0, 10) + '</td>' +
+              '<td class="py-2.5 px-4 font-bold text-white font-mono">' + sym + '</td>' +
+              '<td class="py-2.5 px-4 ' + sideColor + '">' + t.side + '</td>' +
+              '<td class="py-2.5 px-4 font-mono">' + t.quantity + '</td>' +
+              '<td class="py-2.5 px-4 font-mono">' + formatCurrency(t.entry_price, sym) + '</td>' +
+              '<td class="py-2.5 px-4 font-mono">' + formatCurrency(t.current_price || t.entry_price, sym) + '</td>' +
+              '<td class="py-2.5 px-4 font-mono font-bold ' + upClass + '">' + (up >= 0 ? '+' : '-') + getCurrencySymbol(sym) + Math.abs(up).toFixed(2) + ' (' + (t.unrealized_pnl_pct || 0).toFixed(1) + '%)</td>' +
+              '<td class="py-2.5 px-4 font-mono text-gray-300 text-[11px] whitespace-nowrap">' + openTime + '</td>' +
+              '<td class="py-2.5 px-4 font-mono"><span class="px-2 py-0.5 rounded bg-gray-900 border border-gray-700 text-amber-300 text-[10px] font-bold">' + dur + '</span></td>' +
+              '<td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 text-[10px] font-mono">OPEN</span></td>' +
+              '<td class="py-2.5 px-4 text-center"><button onclick="closeTradeItem(\'' + t.trade_id + '\')" class="px-2.5 py-1 bg-rose-900/80 hover:bg-rose-800 text-white rounded text-[10px] font-bold shadow-sm transition">Close</button></td>' +
+            '</tr>';
+          }).join('');
+        });
+    });
+}
+
+function loadPerformanceAnalytics() {
+  fetch('/api/v1/performance-analytics')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var wr = (data.win_rate !== undefined) ? data.win_rate : (data.win_rate_pct || 0);
+      var pf = data.profit_factor || 0;
+      var exp = (data.expectancy !== undefined) ? data.expectancy : (data.expectancy_per_trade || 0);
+      var total = (data.closed_trades !== undefined) ? data.closed_trades : (data.total_trades || 0);
+      var wins = (data.wins !== undefined) ? data.wins : (data.winning_trades || 0);
+      var losses = (data.losses !== undefined) ? data.losses : (data.losing_trades || 0);
+
+      document.getElementById('perf-win-rate').innerText = Number(wr).toFixed(1) + '%';
+      document.getElementById('perf-profit-factor').innerText = Number(pf).toFixed(2);
+      document.getElementById('perf-expectancy').innerText = '$' + Number(exp).toFixed(2);
+      document.getElementById('perf-total-trades').innerText = total;
+      document.getElementById('perf-sample-size').innerText = 'Sample: ' + total + ' Trades (' + wins + 'W / ' + losses + 'L)';
+    });
+}
+
+function loadRejectedSignals() {
+  fetch('/api/v1/rejected-signals')
+    .then(function(r) { return r.json(); })
+    .then(function(sigs) {
+      var tbody = document.getElementById('rejected-signals-body');
+      if (!sigs || !sigs.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-400 font-sans">No vetoed signals recorded in this session.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = sigs.slice(0, 20).map(function(s) {
+        var t = s.created_at ? s.created_at.substring(11, 19) : '--';
+        return '<tr>' +
+          '<td class="py-2 px-4 text-gray-400">' + t + '</td>' +
+          '<td class="py-2 px-4 font-bold text-white">' + (s.underlying || s.symbol) + '</td>' +
+          '<td class="py-2 px-4 text-gray-300">' + (s.direction || '--') + '</td>' +
+          '<td class="py-2 px-4">' + (s.score ? s.score.toFixed(1) : '--') + '</td>' +
+          '<td class="py-2 px-4">' + (s.confidence ? s.confidence.toFixed(1) + '%' : '--') + '</td>' +
+          '<td class="py-2 px-4 font-bold text-rose-400">' + (s.reason_code || 'VETO') + '</td>' +
+          '<td class="py-2 px-4 text-gray-300 font-sans text-[11px]">' + (s.reason_detail || '') + '</td>' +
+        '</tr>';
+      }).join('');
+    });
+}
+
+function resetPortfolioModal() {
+  var balFormatted = '$' + Number(currentPortfolioStartingBalance).toLocaleString('en-US', {minimumFractionDigits: 2});
+  if (confirm("Reset paper trading portfolio back to " + balFormatted + " initial balance?")) {
+    fetch('/api/v1/portfolio/reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ initial_balance: currentPortfolioStartingBalance })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        showToast("Portfolio reset to " + balFormatted + " successfully.", "success", "Portfolio Reset");
+        loadPortfolioStatus();
+      });
+  }
+}
+
+function closeTradeItem(tradeId) {
+  if (confirm("Close position " + tradeId + "?")) {
+    fetch('/api/v1/trades/' + tradeId + '/close', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ exit_price: 100.0, exit_reason: "Manual UI exit" })
+    }).then(function() {
+      showToast("Position closed successfully.", "info", "Position Closed");
+      loadPortfolioStatus();
+    });
+  }
+}
+
+function closeAllPositionsModal() {
+  if (confirm("Force close ALL active open positions immediately?")) {
+    fetch('/api/v1/trades/close-all', { method: 'POST' })
+      .then(function() {
+        showToast("All positions closed.", "warning", "Emergency Close");
+        loadPortfolioStatus();
+      });
+  }
+}
+
+// ==========================================
+// SETTINGS
+// ==========================================
+function loadSettings() {
+  fetch('/api/v1/settings')
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      if (s.starting_balance !== undefined) document.getElementById('setting-starting-balance').value = s.starting_balance;
+      if (s.risk_per_trade_pct !== undefined) document.getElementById('setting-risk-pct').value = s.risk_per_trade_pct;
+      if (s.max_capital_allocation_pct !== undefined) document.getElementById('setting-exposure-pct').value = s.max_capital_allocation_pct;
+      if (s.daily_loss_limit_pct !== undefined) document.getElementById('setting-daily-loss-pct').value = s.daily_loss_limit_pct;
+      if (s.cooldown_minutes !== undefined) document.getElementById('setting-cooldown-min').value = s.cooldown_minutes;
+      if (s.min_model_confidence !== undefined) document.getElementById('setting-min-conf').value = s.min_model_confidence;
+      if (s.min_directional_edge !== undefined) document.getElementById('setting-min-edge').value = s.min_directional_edge;
+      if (s.tp1_multiplier !== undefined) document.getElementById('setting-tp1-mult').value = s.tp1_multiplier;
+      if (s.tp2_multiplier !== undefined) document.getElementById('setting-tp2-mult').value = s.tp2_multiplier;
+      if (s.hard_sl_multiplier !== undefined) document.getElementById('setting-hard-sl').value = s.hard_sl_multiplier;
+      if (s.breakeven_buffer_pct !== undefined) document.getElementById('setting-buffer-atr').value = s.breakeven_buffer_pct;
+    });
+}
+
+function saveSettings() {
+  var payload = {
+    starting_balance: parseFloat(document.getElementById('setting-starting-balance').value),
+    risk_per_trade_pct: parseFloat(document.getElementById('setting-risk-pct').value),
+    max_capital_allocation_pct: parseFloat(document.getElementById('setting-exposure-pct').value),
+    daily_loss_limit_pct: parseFloat(document.getElementById('setting-daily-loss-pct').value),
+    cooldown_minutes: parseInt(document.getElementById('setting-cooldown-min').value),
+    min_model_confidence: parseFloat(document.getElementById('setting-min-conf').value),
+    min_directional_edge: parseFloat(document.getElementById('setting-min-edge').value),
+    tp1_multiplier: parseFloat(document.getElementById('setting-tp1-mult').value),
+    tp2_multiplier: parseFloat(document.getElementById('setting-tp2-mult').value),
+    hard_sl_multiplier: parseFloat(document.getElementById('setting-hard-sl').value),
+    breakeven_buffer_pct: parseFloat(document.getElementById('setting-buffer-atr').value)
+  };
+
+  fetch('/api/v1/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json(); })
+    .then(function(res) {
+      showToast("Configuration saved and applied to live Trade Engine & Portfolio.", "success", "Settings Updated");
+      loadPortfolioStatus();
+      loadSettings();
+    });
+}
+
+// ==========================================
+// OPTIONS ANALYSIS (Preserved & Enhanced)
+// ==========================================
+function analyzeOptions() {
+  var sym = document.getElementById('opt-symbol-input').value.trim().toUpperCase() || 'SPY';
+  currentOptionTicker = sym;
+  document.getElementById('opt-symbol-input').value = sym;
+
+  fetch('/api/v1/options-analysis/' + encodeURIComponent(sym))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        showToast(data.error, 'error', 'Options Error');
+        return;
+      }
+      document.getElementById('opt-results-panel').classList.remove('hidden');
+      document.getElementById('opt-res-symbol').innerText = sym;
+
+      var q = data.quant_synthesis || {};
+      var opt = data.option_contract || {};
+
+      document.getElementById('opt-res-price').innerText = formatCurrency(q.price || 0, sym);
+      document.getElementById('opt-res-dir').innerText = opt.direction || 'CALL';
+      document.getElementById('opt-res-strike').innerText = opt.strike ? formatCurrency(opt.strike, sym) : 'ATM';
+      document.getElementById('opt-res-premium').innerText = opt.premium ? formatCurrency(opt.premium, sym) : '--';
+      document.getElementById('opt-res-exp').innerText = opt.expiration || 'N/A';
+      document.getElementById('opt-res-type').innerText = opt.direction || 'CALL';
+      document.getElementById('opt-res-contract').innerText = opt.contract_symbol || 'N/A';
+
+      if (opt.is_0dte) {
+        document.getElementById('opt-res-0dte-badge').classList.remove('hidden');
+      } else {
+        document.getElementById('opt-res-0dte-badge').classList.add('hidden');
+      }
+
+      // Populate DYNAMIC EXIT ZONES (Contract Premium & Underlying Spot)
+      var dez = opt.dynamic_exit_zones || {};
+      var prem = dez.entry_premium || opt.premium || 0;
+
+      if (document.getElementById('opt-zone-prem-entry')) {
+        document.getElementById('opt-zone-prem-entry').innerText = formatCurrency(prem, sym);
+      }
+      if (document.getElementById('opt-zone-prem-tp1')) {
+        var tp1Val = (dez.opt_tp1 !== undefined) ? dez.opt_tp1 : (prem * 1.3);
+        var tp1Pct = (dez.opt_tp1_pct !== undefined) ? dez.opt_tp1_pct : 30;
+        document.getElementById('opt-zone-prem-tp1').innerText = formatCurrency(tp1Val, sym) + ' (+' + tp1Pct + '%)';
+      }
+      if (document.getElementById('opt-zone-prem-tp2')) {
+        var tp2Val = (dez.opt_tp2 !== undefined) ? dez.opt_tp2 : (prem * 1.7);
+        var tp2Pct = (dez.opt_tp2_pct !== undefined) ? dez.opt_tp2_pct : 70;
+        document.getElementById('opt-zone-prem-tp2').innerText = formatCurrency(tp2Val, sym) + ' (+' + tp2Pct + '%)';
+      }
+      if (document.getElementById('opt-zone-prem-sl')) {
+        var slVal = (dez.opt_sl !== undefined) ? dez.opt_sl : (prem * 0.75);
+        var slPct = (dez.opt_sl_pct !== undefined) ? dez.opt_sl_pct : -25;
+        document.getElementById('opt-zone-prem-sl').innerText = formatCurrency(slVal, sym) + ' (' + slPct + '%)';
+      }
+
+      if (document.getElementById('opt-zone-stock-entry')) {
+        document.getElementById('opt-zone-stock-entry').innerText = formatCurrency(dez.underlying_entry || q.price || 0, sym);
+      }
+      if (document.getElementById('opt-zone-stock-tp1')) {
+        document.getElementById('opt-zone-stock-tp1').innerText = formatCurrency(dez.underlying_tp1 || q.risk_metrics?.take_profit || 0, sym);
+      }
+      if (document.getElementById('opt-zone-stock-tp2')) {
+        document.getElementById('opt-zone-stock-tp2').innerText = formatCurrency(dez.underlying_tp2 || 0, sym);
+      }
+      if (document.getElementById('opt-zone-stock-sl')) {
+        var slAtrDist = (dez.sl_atr_distance !== undefined) ? ' (' + dez.sl_atr_distance + ' ATR)' : '';
+        document.getElementById('opt-zone-stock-sl').innerText = formatCurrency(dez.underlying_sl || q.risk_metrics?.stop_loss || 0, sym) + slAtrDist;
+      }
+
+      if (document.getElementById('opt-zone-protocol-badge')) {
+        if (opt.is_0dte) {
+          document.getElementById('opt-zone-protocol-badge').innerText = '0DTE ULTRA-TIGHT PROTOCOL (SL -20%)';
+          document.getElementById('opt-zone-protocol-badge').className = 'text-[9px] font-mono text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800 font-bold';
+        } else {
+          document.getElementById('opt-zone-protocol-badge').innerText = 'REALISTIC OPTION RISK PROTOCOL (SL -25%)';
+          document.getElementById('opt-zone-protocol-badge').className = 'text-[9px] font-mono text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800 font-bold';
+        }
+      }
+
+      // Stock Metrics
+      document.getElementById('opt-stock-metrics').innerHTML = 
+        '<div class="flex justify-between"><span>Regime:</span><span class="font-mono font-bold text-blue-300">' + (q.regime || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Strategy:</span><span class="font-mono text-amber-300">' + (q.strategy || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Bullish Score:</span><span class="font-mono text-emerald-300">' + (q.bullish_score || 0).toFixed(1) + '</span></div>' +
+        '<div class="flex justify-between"><span>Bearish Score:</span><span class="font-mono text-rose-300">' + (q.bearish_score || 0).toFixed(1) + '</span></div>' +
+        '<div class="flex justify-between font-bold border-t border-[#780000] pt-1"><span>Direction Edge:</span><span class="font-mono text-white">' + (q.direction_edge >= 0 ? '+' : '') + (q.direction_edge || 0).toFixed(1) + '</span></div>';
+
+      // Specific Metrics
+      document.getElementById('opt-specific-metrics').innerHTML = 
+        '<div class="flex justify-between"><span>Option Score:</span><span class="font-mono font-bold text-emerald-300">' + (opt.option_score || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Volume:</span><span class="font-mono">' + (opt.volume || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Open Interest:</span><span class="font-mono">' + (opt.open_interest || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Implied Volatility:</span><span class="font-mono">' + (opt.implied_volatility || '--') + '</span></div>' +
+        '<div class="flex justify-between"><span>Bid / Ask Spread:</span><span class="font-mono">' + (opt.bid_ask || '--') + '</span></div>';
+
+      document.getElementById('opt-reasoning').innerText = q.decision_explanation || q.invalidation || 'Setup evaluated.';
+
+      // Multi-Leg Strategy & Economics Rendering
+      var mls = data.multi_leg_structure || opt.multi_leg_structure || {};
+      if (document.getElementById('opt-multi-strat-badge')) {
+        document.getElementById('opt-multi-strat-badge').innerText = mls.strategy || opt.preferred_strategy || 'LONG_CALL';
+      }
+      if (document.getElementById('opt-multi-type-badge')) {
+        document.getElementById('opt-multi-type-badge').innerText = mls.structure_type || 'DEFINED_RISK';
+      }
+      if (document.getElementById('opt-multi-cost')) {
+        var costStr = mls.net_debit ? ('$' + mls.net_debit.toFixed(2) + ' Debit') : (mls.net_credit ? ('$' + mls.net_credit.toFixed(2) + ' Credit') : '--');
+        document.getElementById('opt-multi-cost').innerText = costStr;
+      }
+      if (document.getElementById('opt-multi-max-profit')) {
+        document.getElementById('opt-multi-max-profit').innerText = (typeof mls.max_profit === 'number') ? ('$' + mls.max_profit.toFixed(2)) : (mls.max_profit || 'UNLIMITED');
+      }
+      if (document.getElementById('opt-multi-max-loss')) {
+        document.getElementById('opt-multi-max-loss').innerText = (typeof mls.max_loss === 'number') ? ('$' + mls.max_loss.toFixed(2)) : (mls.max_loss || '--');
+      }
+      if (document.getElementById('opt-multi-breakeven')) {
+        var beArr = Array.isArray(mls.breakeven) ? mls.breakeven.map(function(b){ return '$' + b.toFixed(2); }).join(' / ') : (mls.breakeven ? ('$' + mls.breakeven) : '--');
+        document.getElementById('opt-multi-breakeven').innerText = beArr;
+      }
+      if (document.getElementById('opt-multi-explanation')) {
+        document.getElementById('opt-multi-explanation').innerText = mls.explanation || 'Optimal multi-leg structure configured for current volatility and 0DTE horizon.';
+      }
+
+      // Legs table
+      var legsTbody = document.getElementById('opt-multi-legs-tbody');
+      if (legsTbody && mls.legs && mls.legs.length > 0) {
+        legsTbody.innerHTML = mls.legs.map(function(leg) {
+          var actColor = leg.action === 'BUY' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold';
+          return '<tr class="border-b border-[#780000]/40 hover:bg-[#380000]/40">' +
+            '<td class="py-2 px-3 text-gray-300">#' + leg.leg_number + '</td>' +
+            '<td class="py-2 px-3 ' + actColor + '">' + leg.action + '</td>' +
+            '<td class="py-2 px-3 text-white">' + leg.type + '</td>' +
+            '<td class="py-2 px-3 font-mono text-emerald-300">$' + leg.strike.toFixed(2) + '</td>' +
+            '<td class="py-2 px-3 font-mono text-gray-200">$' + (leg.price || 0).toFixed(2) + '</td>' +
+          '</tr>';
+        }).join('');
+      } else if (legsTbody) {
+        legsTbody.innerHTML = '<tr><td colspan="5" class="py-2 px-3 text-center text-gray-500">Single leg contract evaluated</td></tr>';
+      }
+
+      // Confluence & Contradiction Rendering
+      var conf = data.confluence_evaluation || q.confluence_evaluation || {};
+      var confScore = conf.net_confluence !== undefined ? conf.net_confluence : (q.setup_score || 0);
+      var contraPen = conf.contradiction_penalty || 0;
+
+      if (document.getElementById('opt-conf-score-val')) {
+        document.getElementById('opt-conf-score-val').innerText = confScore.toFixed(0) + '%';
+      }
+      if (document.getElementById('opt-conf-bar')) {
+        document.getElementById('opt-conf-bar').style.width = Math.min(100, Math.max(0, confScore)) + '%';
+      }
+      if (document.getElementById('opt-contra-penalty-val')) {
+        document.getElementById('opt-contra-penalty-val').innerText = contraPen.toFixed(0) + ' pts';
+      }
+      if (document.getElementById('opt-contra-bar')) {
+        document.getElementById('opt-contra-bar').style.width = Math.min(100, Math.max(0, contraPen)) + '%';
+      }
+      if (document.getElementById('opt-confluence-badge')) {
+        var verd = conf.verdict || (q.entry_valid ? 'APPROVED' : 'NO_TRADE');
+        document.getElementById('opt-confluence-badge').innerText = verd;
+        document.getElementById('opt-confluence-badge').className = (verd === 'APPROVED') ?
+          'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800' :
+          'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-950 text-rose-300 border border-rose-800';
+      }
+
+      // HTF Pattern & 0DTE Metrics
+      var htf = data.htf_pattern || q.htf_pattern || {};
+      if (document.getElementById('opt-htf-pattern-val')) {
+        document.getElementById('opt-htf-pattern-val').innerText = htf.has_htf_setup ? (htf.primary_htf_pattern + ' (' + (htf.htf_score || 0).toFixed(0) + '%)') : 'NONE DETECTED';
+      }
+      if (document.getElementById('opt-expected-move-val')) {
+        var emVal = opt.expected_move ? ('±$' + opt.expected_move.toFixed(2) + ' (' + (opt.expected_move_pct || 0).toFixed(1) + '%)') : '--';
+        document.getElementById('opt-expected-move-val').innerText = emVal;
+      }
+      if (document.getElementById('opt-theta-hourly-val')) {
+        var thVal = (opt.theta_hourly !== undefined) ? ('$' + Math.abs(opt.theta_hourly).toFixed(3) + ' / hr') : '--';
+        document.getElementById('opt-theta-hourly-val').innerText = thVal;
+      }
+      if (document.getElementById('opt-gamma-risk-val')) {
+        document.getElementById('opt-gamma-risk-val').innerText = opt.gamma_risk || (opt.is_0dte ? 'ELEVATED' : 'NORMAL');
+      }
+      if (document.getElementById('opt-time-bucket-val')) {
+        document.getElementById('opt-time-bucket-val').innerText = opt.time_of_day_bucket || 'MIDDAY';
+      }
+    });
+}
+
+function loadTradeHistory() {
+  fetch('/api/v1/trades?limit=100')
+    .then(function(r) { return r.json(); })
+    .then(function(trades) {
+      allTradesCache = trades || [];
+      renderTradeHistoryTable();
+    })
+    .catch(function(e) {
+      console.warn('Trades fetch error:', e);
+    });
+}
+
+function setTradeFilter(f) {
+  currentFilter = f;
+  var filters = ['ALL', 'OPEN', 'CLOSED', 'CALL', 'PUT'];
+  filters.forEach(function(filterKey) {
+    var btn = document.getElementById('filter-btn-' + filterKey);
+    if (btn) {
+      if (filterKey === f) {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-[#f8f8f8] text-[#5b0000] font-bold shadow-md ring-2 ring-white transition';
+      } else {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-[#380000] text-gray-300 font-semibold border border-[#780000] hover:bg-[#5b0000] hover:text-white transition';
+      }
+    }
+  });
+  renderTradeHistoryTable();
+}
+
+function renderTradeHistoryTable() {
+  var tbody = document.getElementById('trade-history-body');
+  if (!tbody) return;
+
+  var trades = allTradesCache || [];
+  if (currentFilter === 'OPEN') {
+    trades = trades.filter(function(t) { return (t.status || '').toUpperCase() === 'OPEN'; });
+  } else if (currentFilter === 'CLOSED') {
+    trades = trades.filter(function(t) { return (t.status || '').toUpperCase() === 'CLOSED'; });
+  } else if (currentFilter === 'CALL') {
+    trades = trades.filter(function(t) {
+      var opt = (t.option_type || '').toUpperCase();
+      var side = (t.side || '').toUpperCase();
+      var cs = (t.contract_symbol || '').toUpperCase();
+      return opt === 'CALL' || side === 'CALL' || cs.includes('C0');
+    });
+  } else if (currentFilter === 'PUT') {
+    trades = trades.filter(function(t) {
+      var opt = (t.option_type || '').toUpperCase();
+      var side = (t.side || '').toUpperCase();
+      var cs = (t.contract_symbol || '').toUpperCase();
+      return opt === 'PUT' || side === 'PUT' || cs.includes('P0');
+    });
+  }
+
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="15" class="text-center text-gray-400 py-6 font-sans">No trades found matching ' + currentFilter + ' filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = trades.map(function(t) {
+    var pnl = (t.status === 'OPEN') ? (t.unrealized_pnl || 0) : (t.pnl || 0);
+    var pnlPct = (t.status === 'OPEN') ? (t.unrealized_pnl_pct || 0) : (t.pnl_pct || 0);
+    var pnlClass = pnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    var sym = t.symbol || '';
+    var isOp = (t.status || '').toUpperCase() === 'OPEN';
+    var statusBadge = isOp
+      ? '<span class="px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 text-[10px] font-mono font-bold">OPEN</span>'
+      : '<span class="px-2 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-700 text-[10px] font-mono">CLOSED</span>';
+
+    var actionBtn = isOp
+      ? '<button onclick="closeTradeItem(\'' + t.trade_id + '\')" class="px-2.5 py-1 bg-rose-900/80 hover:bg-rose-800 text-white rounded-lg text-[10px] font-bold shadow-sm transition">Close</button>'
+      : '<span class="text-gray-500">--</span>';
+
+    var strikeDisplay = t.strike_price ? formatCurrency(t.strike_price, sym) : '--';
+    var entryDisplay = formatCurrency(t.entry_price || 0, sym);
+    var exitDisplay = t.exit_price ? formatCurrency(t.exit_price, sym) : '--';
+    var pnlDisplay = (pnl >= 0 ? '+' : '-') + getCurrencySymbol(sym) + Math.abs(pnl).toFixed(2);
+    var retDisplay = (pnlPct >= 0 ? '+' : '') + Number(pnlPct).toFixed(2) + '%';
+
+    var openTime = t.opened_time_display || (t.date_str ? t.date_str + ' ' + (t.time_session || '') : (t.created_at ? t.created_at.substring(0, 16).replace('T', ' ') : '—'));
+    var closeTime = isOp ? '<span class="text-blue-400 font-bold">ACTIVE</span>' : (t.closed_time_display || (t.closed_at ? t.closed_at.substring(0, 16).replace('T', ' ') : '—'));
+    var durDisplay = '<span class="px-2 py-0.5 rounded bg-gray-900 border border-gray-700 text-amber-300 text-[10px] font-bold">' + (t.duration_str || '—') + '</span>';
+
+    return '<tr>' +
+      '<td class="py-2.5 px-3 font-mono text-gray-300">' + (t.trade_id || '').substring(0, 8) + '</td>' +
+      '<td class="py-2.5 px-3 font-bold text-white font-mono">' + sym + '</td>' +
+      '<td class="py-2.5 px-3">' + (t.option_type || 'STOCK') + '</td>' +
+      '<td class="py-2.5 px-3 font-mono">' + strikeDisplay + '</td>' +
+      '<td class="py-2.5 px-3 font-bold ' + (t.side === 'LONG' || t.side === 'CALL' || t.side === 'BUY' ? 'text-emerald-400' : 'text-rose-400') + '">' + t.side + '</td>' +
+      '<td class="py-2.5 px-3 font-mono">' + entryDisplay + '</td>' +
+      '<td class="py-2.5 px-3 font-mono">' + exitDisplay + '</td>' +
+      '<td class="py-2.5 px-3 font-mono text-gray-300 text-[10px] whitespace-nowrap">' + openTime + '</td>' +
+      '<td class="py-2.5 px-3 font-mono text-[10px] whitespace-nowrap">' + closeTime + '</td>' +
+      '<td class="py-2.5 px-3 font-mono">' + durDisplay + '</td>' +
+      '<td class="py-2.5 px-3">' + statusBadge + '</td>' +
+      '<td class="py-2.5 px-3 font-mono font-bold ' + pnlClass + '">' + pnlDisplay + '</td>' +
+      '<td class="py-2.5 px-3 font-mono font-bold ' + pnlClass + '">' + retDisplay + '</td>' +
+      '<td class="py-2.5 px-3 font-sans text-gray-400 text-[10px]">' + (t.exit_reason || '--') + '</td>' +
+      '<td class="py-2.5 px-3 text-center">' + actionBtn + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ==========================================
+// AI ASSISTANT CHAT
+// ==========================================
+function sendChatMessage() {
+  var input = document.getElementById('chat-input');
+  var msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  var box = document.getElementById('chat-messages');
+  box.innerHTML += '<div class="flex items-start space-x-3 justify-end"><div class="bg-gray-800 border border-gray-700 rounded-2xl p-3 text-white max-w-prose leading-relaxed">' + msg + '</div><div class="w-7 h-7 rounded-lg bg-[#f8f8f8] text-[#5b0000] flex items-center justify-center shrink-0 font-bold text-xs">U</div></div>';
+  box.scrollTop = box.scrollHeight;
+
+  document.getElementById('ai-status-badge').innerText = 'THINKING...';
+
+  fetch('/api/v1/ai/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ message: msg })
+  }).then(function(r) { return r.json(); })
+    .then(function(res) {
+      document.getElementById('ai-status-badge').innerText = 'READY';
+      box.innerHTML += '<div class="flex items-start space-x-3"><div class="w-7 h-7 rounded-lg bg-[#f8f8f8] text-[#5b0000] flex items-center justify-center shrink-0 font-bold text-xs shadow-sm">AI</div><div class="bg-[#380000] border border-[#780000] rounded-2xl p-3 text-gray-100 max-w-prose leading-relaxed whitespace-pre-wrap font-mono text-xs">' + (res.response || 'No response.') + '</div></div>';
+      box.scrollTop = box.scrollHeight;
+    });
+}
+
+// ==========================================
+// WATCHLIST
+// ==========================================
+function loadWatchlist() {
+  fetch('/api/v1/market-metrics')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var tbody = document.getElementById('market-table-body');
+      if (!data || !data.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-gray-400">Watchlist is empty.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(function(item) {
+        var sym = item.symbol || '';
+        if (item.error) {
+          return '<tr><td class="py-4 px-5 font-bold text-white font-mono">' + sym + '</td><td colspan="5" class="text-rose-400 text-xs py-4 px-5">Data unavailable</td></tr>';
+        }
+        var dc = item.daily_change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        var posHtml = item.has_open_position ? '<span class="text-emerald-400 font-bold font-mono">ACTIVE POSITION</span>' : '<span class="text-gray-500 font-mono">No position</span>';
+        var priceFormatted = formatCurrency(item.price, sym);
+        return '<tr>' +
+          '<td class="py-4 px-5 font-bold text-white font-mono cursor-pointer hover:underline" onclick="setStockTicker(\'' + sym + '\')">' + sym + '</td>' +
+          '<td class="py-4 px-5 font-mono font-bold">' + priceFormatted + '</td>' +
+          '<td class="py-4 px-5 font-mono font-bold ' + dc + '">' + (item.daily_change >= 0 ? '+' : '') + item.daily_change.toFixed(2) + '%</td>' +
+          '<td class="py-4 px-5">' + posHtml + '</td>' +
+          '<td class="py-4 px-5"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono">OPEN</span></td>' +
+          '<td class="py-4 px-4 text-center"><button onclick="removeSymbol(\'' + sym + '\')" class="text-gray-400 hover:text-white">&times;</button></td>' +
+        '</tr>';
+      }).join('');
+    });
+}
+
+function openAddModal() {
+  document.getElementById('add-modal').style.display = 'flex';
+  document.getElementById('modal-symbol-input').focus();
+}
+
+function closeAddModal() {
+  document.getElementById('add-modal').style.display = 'none';
+  document.getElementById('modal-symbol-input').value = '';
+}
+
+function submitAddSymbol() {
+  var s = document.getElementById('modal-symbol-input').value.trim().toUpperCase();
+  if (!s) return;
+  fetch('/api/v1/watchlist', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ symbol: s })
+  }).then(function() {
+    closeAddModal();
+    showToast("Added " + s + " to watchlist.", "success", "Watchlist");
+    loadWatchlist();
+  });
+}
+
+function removeSymbol(s) {
+  if (confirm("Remove " + s + " from watchlist?")) {
+    fetch('/api/v1/watchlist/' + encodeURIComponent(s), { method: 'DELETE' })
+      .then(function() {
+        showToast("Removed " + s + " from watchlist.", "info", "Watchlist");
+        loadWatchlist();
+      });
+  }
+}
+
+function manualRefresh() {
+  loadWatchlist();
+  loadPortfolioStatus();
+}
+
+// ==========================================
+// WEBSOCKET SUBSCRIBER
+// ==========================================
+function connectWebSocket() {
+  var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var ws = new WebSocket(proto + '//' + window.location.host + '/live');
+  ws.onmessage = function(ev) {
+    try {
+      var d = JSON.parse(ev.data);
+      if (d.type === 'portfolio_update') {
+        loadPortfolioStatus();
+      } else if (d.type === 'trade_update') {
+        showToast("Trade Update: " + (d.trade?.symbol || '') + " " + (d.trade?.status || ''), "info", "Trade Signal");
+        loadPortfolioStatus();
+        loadTradeHistory();
+      } else if (d.type === 'rejected_signal') {
+        loadRejectedSignals();
+      }
+    } catch(e) {}
+  };
+  ws.onclose = function() {
+    setTimeout(connectWebSocket, 3000);
+  };
+}
+
+// Initial Boot
+window.onload = function() {
+  loadPortfolioStatus();
+  loadSettings();
+  loadPerformanceAnalytics();
+  loadRejectedSignals();
+  loadWatchlist();
+  connectWebSocket();
+  setInterval(loadPortfolioStatus, 8000);
+};
+</script>
+</body>
+</html>

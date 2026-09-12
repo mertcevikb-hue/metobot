@@ -16,6 +16,8 @@ from engine.risk_engine import RiskEngine
 from engine.trade_engine import global_trade_engine
 from engine.position_state import PositionStateMachine
 from filters.veto_filter import VetoFilter
+from engine.htf_patterns import HTFPatternEngine
+from engine.confluence import ConfluenceEngine
 
 
 class QuantEngine:
@@ -69,10 +71,13 @@ class QuantEngine:
         dir_res = DirectionEngine.evaluate(f)
         direction_bias = dir_res.get("bias", "NEUTRAL")  # "BULLISH", "BEARISH", or "NEUTRAL"
 
-        # 5. Modular Strategy Selector (10 targeted strategies)
+        # 5. Higher-Timeframe (HTF) Pattern Detection (VCP, High Tight Flag, Cup & Handle, Flat Base, Growth)
+        htf_pattern = HTFPatternEngine.detect_patterns(highs, lows, closes, volumes, f)
+
+        # 6. Modular Strategy Selector (13 targeted strategies)
         primary_strat = StrategySelector.select_best_strategy(f, regime, direction_bias)
 
-        # 6. Instrument Specific Engines (Stock vs Option)
+        # 7. Instrument Specific Engines (Stock vs Option)
         stock_eval = StockEngine.evaluate(f, direction_bias, regime)
         opt_eval = None
         if option_data:
@@ -81,10 +86,21 @@ class QuantEngine:
                 spot_atr=spot_atr,
                 direction_bias=direction_bias,
                 option_quote=option_data.get("quote") or option_data,
-                contract_meta=option_data.get("meta") or option_data
+                contract_meta=option_data.get("meta") or option_data,
+                dt=dt
             )
 
-        # 7. Risk Gate Assessment
+        # 8. Confluence & Contradiction Engine (HTF Context vs Intraday Structure, Symmetrical Gating)
+        confluence_eval = ConfluenceEngine.evaluate(
+            features=f,
+            direction_bias=direction_bias,
+            regime=regime,
+            htf_pattern=htf_pattern,
+            option_data=opt_eval or option_data,
+            dt=dt
+        )
+
+        # 9. Risk Gate Assessment
         strat_side = primary_strat.get("side", "NEUTRAL")
         effective_side = strat_side if strat_side in ("LONG", "SHORT", "BUY", "SELL") else (
             "LONG" if direction_bias in ("BULLISH", "BUY", "LONG") else (
@@ -93,7 +109,7 @@ class QuantEngine:
         )
         risk = RiskEngine.evaluate_risk(spot_price, spot_atr, strat_side if strat_side in ("LONG", "SHORT") else effective_side)
 
-        # 8. Institutional Veto Gate (Chasing, Divergence, Sweep, 0DTE/IV)
+        # 10. Institutional Veto Gate (Chasing, Divergence, Sweep, 0DTE/IV)
         is_vetoed, veto_reasons = VetoFilter.evaluate_veto(
             features=f,
             decision_side=effective_side,
@@ -105,17 +121,22 @@ class QuantEngine:
             risk["reason"] = "; ".join(veto_reasons)
             primary_strat["trigger_valid"] = False
 
-        # 9. Confidence Engine Decomposition (Direction, Setup, Execution)
+        if not confluence_eval.get("approved", True) and confluence_eval.get("verdict") == "NO_TRADE":
+            risk["approved"] = False
+            primary_strat["trigger_valid"] = False
+
+        # 11. Confidence Engine Decomposition (Direction, Setup, Execution, Confluence)
         conf_eval = ConfidenceEngine.calculate_confidence(
             direction_result=dir_res,
             strategy_result=primary_strat,
             stock_result=stock_eval,
             option_result=opt_eval,
-            is_vetoed=is_vetoed
+            is_vetoed=is_vetoed,
+            confluence_result=confluence_eval
         )
         model_confidence = conf_eval["model_confidence"]
 
-        # 10. Position State Transition
+        # 12. Position State Transition
         state = PositionStateMachine.transition(
             current_position_state,
             regime,
@@ -124,11 +145,14 @@ class QuantEngine:
             risk["approved"]
         )
 
-        # 11. Assemble Candidate Signal for Trade Engine Gatekeeper
+        # 13. Assemble Candidate Signal for Trade Engine Gatekeeper
         warnings = []
         if is_vetoed:
             for vr in veto_reasons:
                 warnings.append(f"VETO: {vr}")
+        for cf in confluence_eval.get("contradiction_factors", []):
+            if "Contradiction" in cf or "Trap" in cf or "Warning" in cf:
+                warnings.append(f"CONTRADICTION: {cf}")
         if spot_atr / spot_price > 0.04:
             warnings.append(f"Elevated ATR ({spot_atr:.2f}) relative to price.")
         if f.get("rsi", 50.0) > 70.0 or f.get("rsi", 50.0) < 30.0:
@@ -137,6 +161,9 @@ class QuantEngine:
             warnings.append(risk.get("reason", "Risk gate rejected setup."))
 
         reasons = list(primary_strat.get("confirmations", []))
+        for cf in confluence_eval.get("confluence_factors", []):
+            if cf not in reasons:
+                reasons.append(cf)
         if not reasons and not primary_strat["active"]:
             reasons.append(primary_strat.get("reason", "No valid setup criteria met."))
 
@@ -152,6 +179,8 @@ class QuantEngine:
             "strategy": primary_strat["strategy"],
             "direction_evaluation": dir_res,
             "confidence_evaluation": conf_eval,
+            "confluence_evaluation": confluence_eval,
+            "htf_pattern": htf_pattern,
             "risk_metrics": risk,
             "entry_valid": entry_candidate,
             "option_data": opt_eval or option_data,
@@ -159,7 +188,7 @@ class QuantEngine:
             "veto_reasons": veto_reasons
         }
 
-        # 12. Trade Engine Institutional Evaluation (Gatekeeper with VETO authority)
+        # 14. Trade Engine Institutional Evaluation (Gatekeeper with VETO authority)
         trade_eval = global_trade_engine.evaluate_candidate(
             candidate_signal=candidate_payload,
             is_market_open=is_market_open,
@@ -191,6 +220,12 @@ class QuantEngine:
             "estimated_probability": None,  # uncalibrated
             "model_confidence": model_confidence,
             "confidence_evaluation": conf_eval,
+            "confluence_evaluation": confluence_eval,
+            "confluence_score": confluence_eval["confluence_score"],
+            "contradiction_penalty": confluence_eval["contradiction_penalty"],
+            "net_confluence": confluence_eval["net_confluence"],
+            "confluence_verdict": confluence_eval["verdict"],
+            "htf_pattern": htf_pattern,
             "direction_evaluation": dir_res,
             "direction_bias": direction_bias,
             "bullish_score": dir_res["bullish_score"],

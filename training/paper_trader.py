@@ -43,33 +43,36 @@ class PaperTrader:
                 })
 
         n = len(candles)
-        # Her 5-10 barda bir işlem simülasyonu başlat
-        for i in range(20, n - 5, 5):
+        from engine.quant_core import QuantEngine
+
+        for i in range(25, n - 5, 3):
+            window = candles[:i+1]
+            c_highs = [c["high"] for c in window]
+            c_lows = [c["low"] for c in window]
+            c_closes = [c["close"] for c in window]
+            c_vols = [c.get("volume", 1000000.0) for c in window]
+
             entry_candle = candles[i]
-            prev_candle = candles[i - 1]
             entry_price = entry_candle["close"]
             entry_vol = entry_candle.get("volume", 1000000.0)
             avg_vol_20 = sum(c.get("volume", 1000000.0) for c in candles[i-20:i]) / 20.0
 
-            # Trend ve Sinyal yönü belirle
-            is_long = entry_price >= prev_candle["close"]
+            # Run QuantEngine
+            analysis = QuantEngine.analyze_ticker(symbol, c_highs, c_lows, c_closes, c_vols)
+            decision = analysis.get("decision", "NO TRADE")
+            
+            if not analysis.get("entry_valid") or decision not in ("LONG", "SHORT", "BUY", "SELL"):
+                continue
+
+            is_long = decision in ("LONG", "BUY")
             trade_side = "long" if is_long else "short"
-            signal_type = "BOS" if (i % 2 == 0) else "FVG_ENTRY"
+            signal_type = analysis.get("strategy", "MOMENTUM_BREAKOUT")
 
-            # TP ve SL seviyeleri (Risk/Reward 1:2)
-            sl_pct = 0.012  # %1.2 Zarar durdur
-            tp_pct = 0.024  # %2.4 Kâr al
-
-            if is_long:
-                sl_price = round(entry_price * (1.0 - sl_pct), 2)
-                tp_price = round(entry_price * (1.0 + tp_pct), 2)
-                fvg_zone = [entry_price * 0.99, entry_price * 1.005]
-                closest_pool = sl_price * 1.001 if (i % 3 == 0) else sl_price * 0.98
-            else:
-                sl_price = round(entry_price * (1.0 + sl_pct), 2)
-                tp_price = round(entry_price * (1.0 - tp_pct), 2)
-                fvg_zone = [entry_price * 0.995, entry_price * 1.01]
-                closest_pool = sl_price * 0.999 if (i % 3 == 0) else sl_price * 1.02
+            risk_metrics = analysis.get("risk_metrics", {})
+            sl_price = float(risk_metrics.get("stop_loss", entry_price * (0.988 if is_long else 1.012)))
+            tp_price = float(risk_metrics.get("take_profit_1", entry_price * (1.024 if is_long else 0.976)))
+            fvg_zone = [entry_price * 0.99, entry_price * 1.005] if is_long else [entry_price * 0.995, entry_price * 1.01]
+            closest_pool = sl_price
 
             # Sonraki 5 bar boyunca fiyatın TP mi SL mi olduğunu takip et
             result = "TIMEOUT"

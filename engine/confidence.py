@@ -23,7 +23,8 @@ class ConfidenceEngine:
         stock_result: Optional[Dict[str, Any]] = None,
         option_result: Optional[Dict[str, Any]] = None,
         is_vetoed: bool = False,
-        min_threshold: float = None
+        min_threshold: float = None,
+        confluence_result: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         threshold = min_threshold if min_threshold is not None else global_config.minimum_confidence
 
@@ -45,10 +46,18 @@ class ConfidenceEngine:
         trigger_valid = bool(strategy_result.get("trigger_valid", False))
         confirmations_cnt = len(strategy_result.get("confirmations", []))
 
-        setup_conf = strat_score * 0.70 + (confirmations_cnt * 6.0)
+        if confluence_result:
+            net_conf = float(confluence_result.get("net_confluence", strat_score))
+            contradiction_pen = float(confluence_result.get("contradiction_penalty", 0.0))
+            setup_conf = (strat_score * 0.35) + (net_conf * 0.45) + (confirmations_cnt * 4.0)
+            if contradiction_pen > 0:
+                setup_conf -= (contradiction_pen * 0.30)
+        else:
+            setup_conf = strat_score * 0.70 + (confirmations_cnt * 6.0)
+
         if not trigger_valid:
             setup_conf = min(setup_conf * 0.60, 45.0)
-        setup_conf = max(10.0, min(98.0, setup_conf))
+        setup_conf = max(5.0, min(98.0, setup_conf))
 
         # 3. Execution Confidence (0 - 100)
         exec_conf = 80.0

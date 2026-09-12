@@ -127,8 +127,8 @@ htmlcov/
 # ==========================================
 # STATIC FILES (if applicable)
 # ==========================================
-static/
-staticfiles/
+/static/
+/staticfiles/
 
 # ==========================================
 # UPLOADS & MEDIA

@@ -37,22 +37,22 @@ class VetoFilter:
 
         if is_long:
             if fvg_dist > cls.MAX_FVG_DISTANCE_ATR:
-                return True, f"Chasing Momentum Veto: Fiyat FVG/Taban bölgesinden {fvg_dist:.2f} ATR aşırı uzaklaştı (Limit: {cls.MAX_FVG_DISTANCE_ATR:.1f} ATR). Zirveden giriş engellendi."
+                return True, f"Chasing Momentum Veto: Price extended {fvg_dist:.2f} ATR from FVG/Base (Limit: {cls.MAX_FVG_DISTANCE_ATR:.1f} ATR). Buying at high prevented."
             if z_vwap > cls.MAX_VWAP_DISTANCE_Z or z_ema9 > 1.8:
-                return True, f"Chasing Momentum Veto: Fiyat VWAP/EMA9 ortalamasından parabolik saptı (Z-VWAP: {z_vwap:.2f})."
+                return True, f"Chasing Momentum Veto: Price extended parabolically from VWAP/EMA9 (Z-VWAP: {z_vwap:.2f})."
         else:
             if fvg_dist > cls.MAX_FVG_DISTANCE_ATR:
-                return True, f"Chasing Momentum Veto: Fiyat FVG/Tepe bölgesinden aşağı yönde {fvg_dist:.2f} ATR aşırı uzaklaştı. Düşüşün dibinden Short engellendi."
+                return True, f"Chasing Momentum Veto: Price extended downward {fvg_dist:.2f} ATR from FVG/Peak. Shorting at low prevented."
             if z_vwap < -cls.MAX_VWAP_DISTANCE_Z or z_ema9 < -1.8:
-                return True, f"Chasing Momentum Veto: Fiyat VWAP/EMA9 ortalamasından aşağı yönde parabolik saptı (Z-VWAP: {z_vwap:.2f})."
+                return True, f"Chasing Momentum Veto: Price extended parabolically downward from VWAP/EMA9 (Z-VWAP: {z_vwap:.2f})."
 
         return False, None
 
     @classmethod
     def check_divergence_exhaustion(cls, features: Dict[str, Any], side: str) -> Tuple[bool, Optional[str]]:
         """
-        Fiyat yeni tepe/dip yaparken RSI veya Cumulative Volume Delta (CVD)
-        üzerinde oluşan uyumsuzlukları (Divergence) denetler.
+        Checks for verified Level 1 RSI momentum exhaustion divergences.
+        Does NOT rely on synthetic Level 2 / CVD order book data.
         """
         div = features.get("divergence", {})
         if not div:
@@ -62,18 +62,18 @@ class VetoFilter:
 
         if is_long and div.get("bearish_divergence"):
             desc = div.get("div_description", "Bearish Divergence")
-            return True, f"Momentum Exhaustion Veto: Fiyat yükselirken {desc} tespit edildi. Alıcı tükenmesi / dağıtım (Distribution) riski."
+            return True, f"Momentum Exhaustion Veto: Detected {desc} while price advanced. Buyer exhaustion / distribution risk."
 
         if not is_long and div.get("bullish_divergence"):
             desc = div.get("div_description", "Bullish Divergence")
-            return True, f"Momentum Exhaustion Veto: Fiyat düşerken {desc} tespit edildi. Satıcı tükenmesi / toplama (Accumulation) riski."
+            return True, f"Momentum Exhaustion Veto: Detected {desc} while price declined. Seller exhaustion / accumulation risk."
 
         return False, None
 
     @classmethod
     def check_liquidity_sweep_climax(cls, features: Dict[str, Any], side: str) -> Tuple[bool, Optional[str]]:
         """
-        Kurumsal likidite süpürme (Liquidity Sweep) ve sahte kırılım (Fakeout) tuzaklarını denetler.
+        Checks for institutional liquidity sweeps and fakeout pinbar traps.
         """
         climax = features.get("climax", {})
         if not climax:
@@ -83,14 +83,14 @@ class VetoFilter:
 
         if is_long and climax.get("is_bearish_sweep"):
             upper_wick = climax.get("upper_wick_pct", 50.0)
-            return True, f"Liquidity Sweep Veto: Zirvede uzun üst fitil (%{upper_wick:.0f}) ve hacim süpürmesi (Pinbar Trap) tespit edildi."
+            return True, f"Liquidity Sweep Veto: Bearish upper wick ({upper_wick:.0f}%) and volume sweep (Pinbar Trap) detected at highs."
 
         if not is_long and climax.get("is_bullish_sweep"):
             lower_wick = climax.get("lower_wick_pct", 50.0)
-            return True, f"Liquidity Sweep Veto: Dipte uzun alt fitil (%{lower_wick:.0f}) ve hacim süpürmesi (Pinbar Trap) tespit edildi."
+            return True, f"Liquidity Sweep Veto: Bullish lower wick ({lower_wick:.0f}%) and volume sweep (Pinbar Trap) detected at lows."
 
         if climax.get("is_churning"):
-            return True, "Volume Climax Veto: Anormal yüksek hacim karşısında fiyat ilerleyemiyor (Churning/Emilim Tuzağı)."
+            return True, "Volume Climax Veto: Abnormal volume spike with stalled price progress (churning/absorption trap)."
 
         return False, None
 
@@ -101,12 +101,12 @@ class VetoFilter:
         dt: Optional[datetime] = None
     ) -> Tuple[bool, Optional[str]]:
         """
-        0DTE zaman erimesi (Theta Decay) ve Volatilite Çöküşü (IV Crush) risklerini denetler.
+        Checks 0DTE theta decay time gates and Implied Volatility (IV Crush) risks.
         """
         if not option_data or not isinstance(option_data, dict):
             return False, None
 
-        # 1. 0DTE Zaman Bandı Kontrolü
+        # 1. 0DTE Time Window Cutoff
         from engine.market_hours import MarketSchedule
         exp_date_str = option_data.get("expiration_date")
         s_dt = MarketSchedule.get_current_session_time(dt)
@@ -118,11 +118,11 @@ class VetoFilter:
             current_time = s_dt.time()
             if current_time >= cls.CUTOFF_0DTE_TIME_GMT3:
                 return True, (
-                    f"0DTE Theta Risk Veto: 0DTE kontratlarda {cls.CUTOFF_0DTE_TIME_GMT3.strftime('%H:%M')} GMT+3 "
-                    f"(13:30 ET) sonrası pozisyon açılamaz. Kapanış öncesi parabolik theta çöküşü riski."
+                    f"0DTE Theta Risk Veto: 0DTE contracts cannot be opened after {cls.CUTOFF_0DTE_TIME_GMT3.strftime('%H:%M')} GMT+3 "
+                    f"(13:30 ET). Parabolic theta decay and gamma flip danger into market close."
                 )
 
-        # 2. Spread / Likidite Kontrolü
+        # 2. Spread / Liquidity Check
         spread_friction = option_data.get("spread_friction_pct")
         if spread_friction is None:
             try:
@@ -137,9 +137,9 @@ class VetoFilter:
                 spread_friction = None
 
         if spread_friction is not None and spread_friction > cls.MAX_OPTION_SPREAD_PCT:
-            return True, f"Illiquid Option Veto: Opsiyon alış-satış makası (%{spread_friction:.1f}) güvenli %{cls.MAX_OPTION_SPREAD_PCT:.1f} sınırını aşıyor."
+            return True, f"Illiquid Option Veto: Option bid-ask spread friction ({spread_friction:.1f}%) exceeds safety limit of {cls.MAX_OPTION_SPREAD_PCT:.1f}%."
 
-        # 3. IV Crush Kontrolü
+        # 3. IV Crush Check
         iv_raw = option_data.get("iv")
         iv_val = 0.0
         if isinstance(iv_raw, (int, float)):
@@ -151,7 +151,7 @@ class VetoFilter:
                 pass
 
         if iv_val > 1.25:
-            return True, f"IV Crush Veto: Opsiyon Implied Volatility (%{iv_val * 100:.1f}) aşırı primli. Düzeltmede ani prim buharlaşması riski."
+            return True, f"IV Crush Veto: Implied Volatility ({iv_val * 100:.1f}%) is excessively elevated. Severe post-event IV crush risk."
 
         return False, None
 

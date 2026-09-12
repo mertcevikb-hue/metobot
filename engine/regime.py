@@ -405,6 +405,188 @@ class StrategyEngine:
 
         return {"strategy": "TREND_CONTINUATION", "active": False, "score": 20.0, "side": "NEUTRAL", "reason": "No slope continuation."}
 
+    # 11. Momentum Consolidation Breakout (CORE)
+    @staticmethod
+    def evaluate_momentum_consolidation_breakout(f: Dict[str, Any], regime: str) -> Dict[str, Any]:
+        """
+        Detects volatility compression / consolidation followed by explosive breakout
+        with volume expansion, momentum thrust, and VWAP alignment.
+        """
+        price = f.get("price", 0.0)
+        vwap = f.get("vwap", price)
+        rvol = float(f.get("rvol", 1.0))
+        z_mom = float(f.get("z_momentum", 0.0))
+        is_comp = bool(f.get("is_compressed", False)) or float(f.get("bb_width", 0.02)) < 0.015
+        orh = float(f.get("orh", price))
+        orl = float(f.get("orl", price))
+        or_breakout = bool(f.get("or_breakout", False))
+        or_breakdown = bool(f.get("or_breakdown", False))
+        false_bull = bool(f.get("or_false_breakout_bullish", False))
+        false_bear = bool(f.get("or_false_breakout_bearish", False))
+
+        # Bullish Consolidation Breakout
+        if (price > orh or or_breakout or (is_comp and z_mom > 0.20)) and not false_bull:
+            if price > vwap and rvol >= 1.20 and z_mom > 0.15:
+                score = 75.0 + min(rvol * 8.0, 15.0) + min(z_mom * 12.0, 8.0)
+                return {
+                    "strategy": "MOMENTUM_CONSOLIDATION_BREAKOUT",
+                    "active": True,
+                    "side": "LONG",
+                    "score": round(min(score, 98.0), 1),
+                    "trigger_valid": True,
+                    "confirmations": [
+                        f"Consolidation Breakout (Price {price:.2f} > ORH {orh:.2f})",
+                        f"Volume Expansion (RVOL: {rvol:.1f}x)",
+                        f"Momentum Expansion (Z-Mom: {z_mom:.2f})",
+                        "Above Institutional VWAP"
+                    ]
+                }
+
+        # Bearish Consolidation Breakdown
+        if (price < orl or or_breakdown or (is_comp and z_mom < -0.20)) and not false_bear:
+            if price < vwap and rvol >= 1.20 and z_mom < -0.15:
+                score = 75.0 + min(rvol * 8.0, 15.0) + min(abs(z_mom) * 12.0, 8.0)
+                return {
+                    "strategy": "MOMENTUM_CONSOLIDATION_BREAKOUT",
+                    "active": True,
+                    "side": "SHORT",
+                    "score": round(min(score, 98.0), 1),
+                    "trigger_valid": True,
+                    "confirmations": [
+                        f"Consolidation Breakdown (Price {price:.2f} < ORL {orl:.2f})",
+                        f"Volume Expansion (RVOL: {rvol:.1f}x)",
+                        f"Bearish Momentum Expansion (Z-Mom: {z_mom:.2f})",
+                        "Below Institutional VWAP"
+                    ]
+                }
+
+        return {
+            "strategy": "MOMENTUM_CONSOLIDATION_BREAKOUT",
+            "active": False,
+            "score": 25.0,
+            "side": "NEUTRAL",
+            "reason": "No confirmed consolidation breakout."
+        }
+
+    # 12. Episodic Pivot (EP) (CORE)
+    @staticmethod
+    def evaluate_episodic_pivot(f: Dict[str, Any], regime: str) -> Dict[str, Any]:
+        """
+        Identifies catalyzed setups with significant gap, extreme RVOL (>= 1.8x),
+        and intraday confirmation above the opening range and VWAP.
+        """
+        price = f.get("price", 0.0)
+        vwap = f.get("vwap", price)
+        rvol = float(f.get("rvol", 1.0))
+        z_mom = float(f.get("z_momentum", 0.0))
+        day_open = float(f.get("day_open", price))
+        pdc = float(f.get("pdc", price))
+        orh = float(f.get("orh", price))
+        orl = float(f.get("orl", price))
+
+        gap_pct = ((day_open - pdc) / pdc * 100.0) if pdc > 0 else 0.0
+
+        # Bullish Episodic Pivot (Gap Up + High RVOL + Holds above VWAP & ORH)
+        if gap_pct >= 1.20 and rvol >= 1.80:
+            holds_levels = (price >= day_open * 0.998) and (price > vwap)
+            trigger_valid = holds_levels and (price >= orh * 0.999) and (z_mom > 0.10)
+            score = 76.0 + min(rvol * 6.0, 14.0) + min(gap_pct * 1.5, 8.0)
+            return {
+                "strategy": "EPISODIC_PIVOT",
+                "active": holds_levels,
+                "side": "LONG",
+                "score": round(min(score, 98.0), 1),
+                "trigger_valid": trigger_valid,
+                "confirmations": [
+                    f"Episodic Pivot Gap (+{gap_pct:.1f}%)",
+                    f"Institutional Volume Surge (RVOL: {rvol:.1f}x)",
+                    "Holding above Opening Range & VWAP"
+                ]
+            }
+
+        # Bearish Episodic Pivot (Gap Down + High RVOL + Holds below VWAP & ORL)
+        if gap_pct <= -1.20 and rvol >= 1.80:
+            holds_bear = (price <= day_open * 1.002) and (price < vwap)
+            trigger_valid = holds_bear and (price <= orl * 1.001) and (z_mom < -0.10)
+            score = 76.0 + min(rvol * 6.0, 14.0) + min(abs(gap_pct) * 1.5, 8.0)
+            return {
+                "strategy": "EPISODIC_PIVOT",
+                "active": holds_bear,
+                "side": "SHORT",
+                "score": round(min(score, 98.0), 1),
+                "trigger_valid": trigger_valid,
+                "confirmations": [
+                    f"Episodic Pivot Gap Down ({gap_pct:.1f}%)",
+                    f"Institutional Breakdown Volume (RVOL: {rvol:.1f}x)",
+                    "Sustained below Opening Range Low & VWAP"
+                ]
+            }
+
+        return {
+            "strategy": "EPISODIC_PIVOT",
+            "active": False,
+            "score": 20.0,
+            "side": "NEUTRAL",
+            "reason": "No episodic pivot gap / volume surge."
+        }
+
+    # 13. Parabolic Short (CORE PUT Strategy)
+    @staticmethod
+    def evaluate_parabolic_short(f: Dict[str, Any], regime: str) -> Dict[str, Any]:
+        """
+        Identifies exhaustion reversals after extreme upside extension.
+        Requires evidence of buyer exhaustion (divergence, pinbar sweep, or loss of VWAP)
+        to generate legitimate, high-expectancy PUT signals.
+        """
+        price = f.get("price", 0.0)
+        vwap = f.get("vwap", price)
+        z_vwap = float(f.get("z_vwap_distance", 0.0))
+        fvg_dist = float(f.get("fvg_distance_atr", 0.0))
+        rsi = float(f.get("rsi", 50.0))
+        div = f.get("divergence", {})
+        climax = f.get("climax", {})
+        vwap_loss = bool(f.get("vwap_loss", False))
+        vwap_rejection = bool(f.get("vwap_rejection", False))
+
+        is_extended = (z_vwap >= 1.25) or (fvg_dist >= 1.8) or (rsi >= 70.0)
+        has_exhaustion = (
+            bool(div.get("bearish_divergence")) or
+            bool(climax.get("is_bearish_sweep")) or
+            bool(climax.get("is_churning")) or
+            vwap_loss or
+            vwap_rejection or
+            (price < f.get("ema9", price) and rsi < 68.0)
+        )
+
+        if is_extended and has_exhaustion:
+            score = 75.0 + min((rsi - 65.0) * 1.5, 10.0) + (10.0 if div.get("bearish_divergence") else 0.0)
+            trigger_valid = (price < f.get("ema9", price) or vwap_loss or climax.get("is_bearish_sweep", False))
+            confirmations = [
+                f"Parabolic Extension (Z-VWAP: {z_vwap:.2f}, RSI: {rsi:.1f})",
+                "Buyer Exhaustion Signal Confirmed"
+            ]
+            if div.get("bearish_divergence"):
+                confirmations.append("Bearish Momentum Divergence")
+            if climax.get("is_bearish_sweep"):
+                confirmations.append("Liquidity Sweep / Rejection Upper Wick")
+
+            return {
+                "strategy": "PARABOLIC_SHORT",
+                "active": True,
+                "side": "SHORT",
+                "score": round(min(score, 98.0), 1),
+                "trigger_valid": trigger_valid,
+                "confirmations": confirmations
+            }
+
+        return {
+            "strategy": "PARABOLIC_SHORT",
+            "active": False,
+            "score": 15.0,
+            "side": "NEUTRAL",
+            "reason": "No parabolic exhaustion criteria met."
+        }
+
 
 class StrategySelector:
     """
@@ -420,8 +602,11 @@ class StrategySelector:
         regime: str,
         direction_bias: str = "NEUTRAL"
     ) -> Dict[str, Any]:
-        # Evaluate all 10 strategies
+        # Evaluate all 13 strategies
         all_evals = [
+            StrategyEngine.evaluate_momentum_consolidation_breakout(features, regime),
+            StrategyEngine.evaluate_episodic_pivot(features, regime),
+            StrategyEngine.evaluate_parabolic_short(features, regime),
             StrategyEngine.evaluate_trend_following(features, regime),
             StrategyEngine.evaluate_vwap_reclaim(features, regime),
             StrategyEngine.evaluate_vwap_rejection(features, regime),

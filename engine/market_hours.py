@@ -1,14 +1,16 @@
 from datetime import datetime, timezone, time, date, timedelta
 from typing import Dict, Any, Tuple, Optional, Union
+from zoneinfo import ZoneInfo
 from loguru import logger
 
 # ==========================================
-# CENTRALIZED SINGLE SOURCE OF TRUTH: GMT+3 (ISTANBUL)
-# PRE MARKET:    12:00 - 16:30
-# NORMAL MARKET: 16:30 - 23:00
-# AFTER MARKET:  23:00 - 03:00
-# MARKET CLOSED: 03:00 - 12:00
+# CENTRALIZED TIMEZONE SINGLE SOURCE OF TRUTH
 # ==========================================
+US_EASTERN_TZ = ZoneInfo("America/New_York")
+ISTANBUL_TZ = ZoneInfo("Europe/Istanbul")
+UTC_TZ = timezone.utc
+
+# Backward-compatible GMT+3 (Istanbul) session constants
 MARKET_TIMEZONE: str = "GMT+3"
 MARKET_OPEN_TIME: str = "16:30"
 MARKET_CLOSE_TIME: str = "23:00"
@@ -26,6 +28,11 @@ MARKET_CLOSED_CLOSE_TIME: str = "12:00"
 SESSION_TZ = timezone(timedelta(hours=3), name="GMT+3")
 SESSION_OPEN_TIME = time(16, 30, 0)
 SESSION_CLOSE_TIME = time(23, 0, 0)
+
+# US Regular Session Hours in Eastern Time
+US_MARKET_OPEN_TIME = time(9, 30, 0)
+US_MARKET_CLOSE_TIME = time(16, 0, 0)
+TRADING_MINUTES_PER_DAY = 390  # 6.5 hours = 390 minutes
 
 
 class SessionName(str):
@@ -67,6 +74,8 @@ class MarketSchedule:
     TZ = SESSION_TZ
     OPEN_TIME = SESSION_OPEN_TIME
     CLOSE_TIME = SESSION_CLOSE_TIME
+    US_TZ = US_EASTERN_TZ
+    TR_TZ = ISTANBUL_TZ
 
     @classmethod
     def get_current_session_time(cls, dt: Optional[datetime] = None) -> datetime:
@@ -76,6 +85,203 @@ class MarketSchedule:
         elif dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(cls.TZ)
+
+    @classmethod
+    def get_us_market_time(cls, dt: Optional[datetime] = None) -> datetime:
+        """Convert UTC or local datetime to America/New_York (US Eastern Time)."""
+        if dt is None:
+            dt = datetime.now(timezone.utc)
+        elif dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(cls.US_TZ)
+
+    @classmethod
+    def get_istanbul_time(cls, dt: Optional[datetime] = None) -> datetime:
+        """Convert UTC or local datetime to Europe/Istanbul (TRT)."""
+        if dt is None:
+            dt = datetime.now(timezone.utc)
+        elif dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(cls.TR_TZ)
+
+    @classmethod
+    def get_utc_time(cls, dt: Optional[datetime] = None) -> datetime:
+        """Convert any datetime to timezone-aware UTC."""
+        if dt is None:
+            return datetime.now(timezone.utc)
+        elif dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @classmethod
+    def get_market_close_timestamp(cls, dt: Optional[datetime] = None) -> datetime:
+        """Return today's 16:00:00 ET regular market close timestamp in America/New_York."""
+        et_dt = cls.get_us_market_time(dt)
+        return et_dt.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    @classmethod
+    def get_expiration_timestamp(cls, expiration_date_str: str, dt: Optional[datetime] = None) -> datetime:
+        """
+        Return the 16:00:00 ET expiration timestamp for a given YYYY-MM-DD expiration date.
+        """
+        et_dt = cls.get_us_market_time(dt)
+        if not expiration_date_str or expiration_date_str in ("N/A", "Data unavailable"):
+            return cls.get_market_close_timestamp(dt)
+        try:
+            exp_d = datetime.strptime(str(expiration_date_str)[:10], "%Y-%m-%d").date()
+            return datetime(exp_d.year, exp_d.month, exp_d.day, 16, 0, 0, tzinfo=cls.US_TZ)
+        except Exception:
+            return cls.get_market_close_timestamp(dt)
+
+    @classmethod
+    def get_minutes_to_market_close(cls, dt: Optional[datetime] = None) -> float:
+        """
+        Calculate minutes remaining until US regular session close (16:00 ET).
+        If before 09:30 ET on a weekday, returns full session (390.0 minutes).
+        If during regular session (09:30 - 16:00 ET), returns actual minutes remaining.
+        If after 16:00 ET or weekend, returns 0.0 minutes.
+        """
+        et_dt = cls.get_us_market_time(dt)
+        weekday = et_dt.weekday()
+        if weekday >= 5:
+            return 0.0
+
+        t = et_dt.time()
+        close_dt = cls.get_market_close_timestamp(et_dt)
+        open_dt = et_dt.replace(hour=9, minute=30, second=0, microsecond=0)
+
+        if t < time(9, 30):
+            return float(TRADING_MINUTES_PER_DAY)
+        elif t >= time(16, 0):
+            return 0.0
+        else:
+            diff_sec = max(0.0, (close_dt - et_dt).total_seconds())
+            return round(diff_sec / 60.0, 2)
+
+    @classmethod
+    def get_session_progress(cls, dt: Optional[datetime] = None) -> float:
+        """
+        Calculate fraction of the regular US trading session elapsed (0.0 to 1.0).
+        0.0 = At or before 09:30 ET
+        1.0 = At or after 16:00 ET (or weekend)
+        """
+        et_dt = cls.get_us_market_time(dt)
+        weekday = et_dt.weekday()
+        if weekday >= 5:
+            return 1.0
+
+        t = et_dt.time()
+        if t < time(9, 30):
+            return 0.0
+        elif t >= time(16, 0):
+            return 1.0
+
+        open_dt = et_dt.replace(hour=9, minute=30, second=0, microsecond=0)
+        elapsed_sec = max(0.0, (et_dt - open_dt).total_seconds())
+        progress = elapsed_sec / (TRADING_MINUTES_PER_DAY * 60.0)
+        return min(1.0, max(0.0, round(progress, 4)))
+
+    @classmethod
+    def get_fraction_of_trading_day_remaining(cls, dt: Optional[datetime] = None) -> float:
+        """
+        Calculate fraction of the regular trading session remaining (1.0 down to 0.0).
+        """
+        progress = cls.get_session_progress(dt)
+        return round(max(0.0, 1.0 - progress), 4)
+
+    @classmethod
+    def get_time_of_day_bucket(cls, dt: Optional[datetime] = None) -> str:
+        """
+        Classify the current time into intraday market regimes:
+        - OPEN: 09:30 - 10:00 ET (opening range discovery, wide spreads, high volatility)
+        - MORNING: 10:00 - 11:30 ET (prime trend expansion window)
+        - MIDDAY: 11:30 - 14:00 ET (lunch lull, chop / mean reversion risk)
+        - AFTERNOON: 14:00 - 15:30 ET (institutional continuation / rotation)
+        - EXPIRATION_WINDOW: 15:30 - 16:00 ET (0DTE extreme gamma / theta collapse, no entries)
+        - PRE_MARKET: 04:00 - 09:30 ET
+        - AFTER_HOURS: 16:00 - 20:00 ET
+        - CLOSED: 20:00 - 04:00 ET and weekends
+        """
+        et_dt = cls.get_us_market_time(dt)
+        weekday = et_dt.weekday()
+        if weekday >= 5:
+            return "CLOSED"
+
+        t = et_dt.time()
+        if time(9, 30) <= t < time(10, 0):
+            return "OPEN"
+        elif time(10, 0) <= t < time(11, 30):
+            return "MORNING"
+        elif time(11, 30) <= t < time(14, 0):
+            return "MIDDAY"
+        elif time(14, 0) <= t < time(15, 30):
+            return "AFTERNOON"
+        elif time(15, 30) <= t < time(16, 0):
+            return "EXPIRATION_WINDOW"
+        elif time(4, 0) <= t < time(9, 30):
+            return "PRE_MARKET"
+        elif time(16, 0) <= t < time(20, 0):
+            return "AFTER_HOURS"
+        else:
+            return "CLOSED"
+
+    @classmethod
+    def calculate_0dte_metrics(
+        cls,
+        expiration_date_str: Optional[str] = None,
+        dt: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Comprehensive 0DTE time-to-expiration and session state evaluator.
+        Provides continuous metrics for Greek estimation, theta decay, and gamma acceleration.
+        """
+        et_dt = cls.get_us_market_time(dt)
+        tr_dt = cls.get_istanbul_time(dt)
+        utc_dt = cls.get_utc_time(dt)
+
+        exp_dt = cls.get_expiration_timestamp(expiration_date_str or "", dt)
+        today_et = et_dt.date()
+        exp_date = exp_dt.date()
+        dte = max(0, (exp_date - today_et).days)
+        is_0dte = (dte == 0)
+
+        # Minutes to expiry
+        if is_0dte:
+            minutes_to_exp = cls.get_minutes_to_market_close(dt)
+            # fraction in annual trading days (252 days * 390 minutes)
+            annual_trading_minutes = 252.0 * TRADING_MINUTES_PER_DAY
+            # Enforce continuous time (minimum 1 minute to avoid divide-by-zero at closing bell)
+            eff_minutes = max(minutes_to_exp, 1.0)
+            time_to_expiry_years = eff_minutes / annual_trading_minutes
+            fraction_remaining = cls.get_fraction_of_trading_day_remaining(dt)
+            session_progress = cls.get_session_progress(dt)
+        else:
+            fraction_remaining = cls.get_fraction_of_trading_day_remaining(dt)
+            session_progress = cls.get_session_progress(dt)
+            # For multi-day, include fraction of remaining today plus remaining full days
+            eff_days = dte + fraction_remaining
+            time_to_expiry_years = max(eff_days / 365.0, 1.0 / 365.0)
+            minutes_to_exp = (dte * TRADING_MINUTES_PER_DAY) + (fraction_remaining * TRADING_MINUTES_PER_DAY)
+
+        bucket = cls.get_time_of_day_bucket(dt)
+
+        return {
+            "is_0dte": is_0dte,
+            "dte": dte,
+            "current_time_et": et_dt.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "current_time_istanbul": tr_dt.strftime("%Y-%m-%d %H:%M:%S TRT"),
+            "current_time_utc": utc_dt.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "market_close_timestamp": cls.get_market_close_timestamp(dt).isoformat(),
+            "expiration_timestamp": exp_dt.isoformat(),
+            "minutes_to_expiry": round(minutes_to_exp, 1),
+            "hours_to_expiry": round(minutes_to_exp / 60.0, 2),
+            "time_to_expiry_years": round(time_to_expiry_years, 6),
+            "session_progress": session_progress,
+            "session_progress_pct": f"{round(session_progress * 100, 1)}%",
+            "fraction_of_trading_day_remaining": fraction_remaining,
+            "time_of_day_bucket": bucket,
+            "trading_minutes_per_day": TRADING_MINUTES_PER_DAY
+        }
 
     @classmethod
     def is_market_open(

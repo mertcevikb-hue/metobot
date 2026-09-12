@@ -47,17 +47,22 @@ class PolygonOptionsClient:
         self, 
         underlying_symbol: str, 
         contract_type: Optional[str] = None,
-        spot_price: Optional[float] = None
+        spot_price: Optional[float] = None,
+        target_dte: Optional[int] = None,
+        allow_0dte: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Fetches active real options contracts from the live exchange (Polygon or CBOE).
         100% REAL market data.
-        Smart moneyness & expiration filtering prevents selecting deep out-of-money, illiquid, or 0DTE decaying contracts.
+        Smart moneyness & expiration filtering supports real 0DTE contracts when requested/available,
+        as well as weekly and monthly standard expirations.
         """
+        from engine.market_hours import MarketSchedule
         sym = underlying_symbol.upper().replace("/", "").replace("-USD", "")
         c_type = (contract_type or "call").lower()
         price_bucket = round(spot_price, 0) if (spot_price and spot_price > 0) else "any"
-        cache_key = f"{sym}_{c_type}_{price_bucket}"
+        dte_tag = f"dte{target_dte}" if target_dte is not None else ("0dte_ok" if allow_0dte else "no0dte")
+        cache_key = f"{sym}_{c_type}_{price_bucket}_{dte_tag}"
         now_ts = time.time()
 
         # Check 60-second cache to prevent network hammering
@@ -80,11 +85,22 @@ class PolygonOptionsClient:
                     kwargs["strike_price_gte"] = max(1.0, round(spot_price * 0.85, 2))
                     kwargs["strike_price_lte"] = round(spot_price * 1.15, 2)
 
+                today_et = MarketSchedule.get_us_market_time().date()
                 for c in self.client.list_options_contracts(**kwargs):
+                    exp_s = getattr(c, 'expiration_date', "N/A")
+                    c_dte = 7
+                    try:
+                        exp_d = datetime.strptime(str(exp_s)[:10], "%Y-%m-%d").date()
+                        c_dte = max(0, (exp_d - today_et).days)
+                    except Exception:
+                        pass
+
                     contracts.append({
                         "ticker": c.ticker,
                         "strike_price": getattr(c, 'strike_price', 0.0),
-                        "expiration_date": getattr(c, 'expiration_date', "N/A"),
+                        "expiration_date": exp_s,
+                        "dte": c_dte,
+                        "is_0dte": (c_dte == 0),
                         "open_interest": getattr(c, 'open_interest', 0)
                     })
                 return contracts
@@ -104,26 +120,41 @@ class PolygonOptionsClient:
             if not expirations:
                 return []
 
-            # Smart Expiration Selection:
-            # Avoid 0DTE decaying or expired options; target standard weekly expirations (DTE >= 1, ideally 2-14 days)
-            today = datetime.now(timezone.utc).date()
+            # Expiration Selection using US/Eastern calendar
+            today_et = MarketSchedule.get_us_market_time().date()
             valid_exps = []
             for exp_str in expirations:
                 try:
-                    exp_d = datetime.strptime(exp_str, "%Y-%m-%d").date()
-                    dte = (exp_d - today).days
-                    if dte >= 1:
+                    exp_d = datetime.strptime(str(exp_str)[:10], "%Y-%m-%d").date()
+                    dte = (exp_d - today_et).days
+                    if dte >= 0:
                         valid_exps.append((dte, exp_str))
                 except Exception:
                     continue
 
-            target_exp = expirations[0]
-            if valid_exps:
-                target_exp = valid_exps[0][1]
-                for dte, exp_str in valid_exps:
-                    if 2 <= dte <= 14:
-                        target_exp = exp_str
-                        break
+            if not valid_exps:
+                return []
+
+            valid_exps.sort(key=lambda x: x[0])
+
+            # Select expiration based on target_dte and allow_0dte preferences
+            if target_dte == 0:
+                # Explicitly request 0DTE if available
+                zero_dte_matches = [x for x in valid_exps if x[0] == 0]
+                target_exp = zero_dte_matches[0][1] if zero_dte_matches else valid_exps[0][1]
+            elif target_dte is not None:
+                # Closest to target_dte
+                target_exp = min(valid_exps, key=lambda x: abs(x[0] - target_dte))[1]
+            else:
+                # Default: if 0DTE is available and allowed, use 0DTE; otherwise pick nearest weekly (0-14 days)
+                if allow_0dte and any(x[0] == 0 for x in valid_exps):
+                    target_exp = [x for x in valid_exps if x[0] == 0][0][1]
+                else:
+                    target_exp = valid_exps[0][1]
+                    for dte, exp_str in valid_exps:
+                        if 1 <= dte <= 14:
+                            target_exp = exp_str
+                            break
 
             chain = t.option_chain(target_exp)
             df = chain.calls if c_type == "call" else chain.puts
@@ -137,6 +168,12 @@ class PolygonOptionsClient:
                 df_filtered = df[(df["strike"] >= min_k) & (df["strike"] <= max_k)]
                 if not df_filtered.empty:
                     df = df_filtered
+
+            target_dte_val = 7
+            try:
+                target_dte_val = max(0, (datetime.strptime(str(target_exp)[:10], "%Y-%m-%d").date() - today_et).days)
+            except Exception:
+                pass
 
             contracts = []
             for _, row in df.iterrows():
@@ -159,7 +196,9 @@ class PolygonOptionsClient:
                     "last_trade_price": last_price,
                     "implied_volatility": iv,
                     "open_interest": oi,
-                    "volume": vol
+                    "volume": vol,
+                    "dte": target_dte_val,
+                    "is_0dte": (target_dte_val == 0)
                 }
                 # Cache for subsequent quote lookups
                 self._quote_cache[ticker] = quote_info
@@ -169,6 +208,8 @@ class PolygonOptionsClient:
                     "ticker": ticker,
                     "strike_price": strike,
                     "expiration_date": target_exp,
+                    "dte": target_dte_val,
+                    "is_0dte": (target_dte_val == 0),
                     "open_interest": oi,
                     "volume": vol,
                     "bid_price": bid,
