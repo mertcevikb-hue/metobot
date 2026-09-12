@@ -1,0 +1,219 @@
+//@version=5
+indicator("Metobot Pro v0.5 - Anti-Exhaustion & 0DTE Veto Shield", shorttitle="Metobot Shield v0.5", overlay=true, max_boxes_count=80, max_labels_count=80)
+
+// =============================================================================
+// METOBOT v0.5: ANTI-CHASING, DIVERGENCE & 0DTE TIME FILTER
+// Designed for 100% Free TradingView Accounts (Zero Paid Webhook Dependency)
+// Solves: Late Entry (Exhaustion), Liquidity Sweeps, CVD/RSI Divs, and 0DTE $0 Losses.
+// =============================================================================
+
+// --- INPUTS ---
+grp_fvg       = "1. FVG & Chasing Momentum Settings"
+show_fvg      = input.bool(true, "Show Fair Value Gaps (FVG)", group=grp_fvg)
+fvg_dist_lim  = input.float(2.2, "Max Allowed FVG Distance (ATR Units)", minval=1.0, maxval=5.0, step=0.1, group=grp_fvg)
+atr_len       = input.int(14, "ATR Length", group=grp_fvg)
+
+grp_div       = "2. Momentum Exhaustion & Divergence"
+show_div      = input.bool(true, "Detect RSI & CVD Divergences", group=grp_div)
+rsi_len       = input.int(14, "RSI Length", group=grp_div)
+pivot_lb      = input.int(4, "Pivot Lookback Window", minval=2, maxval=10, group=grp_div)
+
+grp_climax    = "3. Liquidity Sweep & Climax Candlesticks"
+show_sweep    = input.bool(true, "Detect Liquidity Sweep / Pinbar Traps", group=grp_climax)
+wick_thresh   = input.float(45.0, "Pinbar Wick Threshold (%)", group=grp_climax)
+vol_multiplier= input.float(1.25, "Climax Volume Multiplier vs SMA", group=grp_climax)
+
+grp_0dte      = "4. 0DTE Options Theta Danger Zone"
+show_0dte_bg  = input.bool(true, "Highlight 0DTE Afternoon Danger Zone", group=grp_0dte)
+cutoff_hour   = input.int(13, "Cutoff Hour (ET)", group=grp_0dte)
+cutoff_min    = input.int(30, "Cutoff Minute (ET)", group=grp_0dte)
+
+grp_hud       = "5. On-Screen HUD Dashboard"
+show_hud      = input.bool(true, "Show Metobot Status HUD", group=grp_hud)
+
+// =============================================================================
+// 1. FAIR VALUE GAP (FVG) & DISTANCE ENGINE
+// =============================================================================
+atr_val = ta.atr(atr_len)
+
+// Bullish FVG: Low of current bar is above High of 2 bars ago
+bull_fvg = low > high[2] and (low - high[2]) > (0.15 * atr_val)
+// Bearish FVG: High of current bar is below Low of 2 bars ago
+bear_fvg = high < low[2] and (low[2] - high) > (0.15 * atr_val)
+
+var float active_fvg_mid = na
+var float active_fvg_top = na
+var float active_fvg_bot = na
+var bool  active_fvg_is_bull = na
+
+if bull_fvg
+    active_fvg_top := low
+    active_fvg_bot := high[2]
+    active_fvg_mid := (low + high[2]) / 2.0
+    active_fvg_is_bull := true
+    if show_fvg
+        box.new(bar_index - 2, active_fvg_top, bar_index + 12, active_fvg_bot, 
+                bgcolor=color.new(color.teal, 85), border_color=color.teal, border_style=line.style_dotted)
+
+if bear_fvg
+    active_fvg_top := low[2]
+    active_fvg_bot := high
+    active_fvg_mid := (low[2] + high) / 2.0
+    active_fvg_is_bull := false
+    if show_fvg
+        box.new(bar_index - 2, active_fvg_top, bar_index + 12, active_fvg_bot, 
+                bgcolor=color.new(color.maroon, 85), border_color=color.maroon, border_style=line.style_dotted)
+
+// Invalidation / Mitigation check
+if not na(active_fvg_mid)
+    if active_fvg_is_bull and low < active_fvg_bot
+        active_fvg_mid := na
+    else if not active_fvg_is_bull and high > active_fvg_top
+        active_fvg_mid := na
+
+// Safe fallback midpoint is 21 EMA if no unmitigated FVG is near
+ema21 = ta.ema(close, 21)
+ref_point = not na(active_fvg_mid) ? active_fvg_mid : ema21
+fvg_distance_atr = math.abs(close - ref_point) / (atr_val > 0 ? atr_val : 1.0)
+is_chasing_extended = fvg_distance_atr > fvg_dist_lim
+
+// Plot warning tag if extended
+plotshape(is_chasing_extended and ta.change(is_chasing_extended) and is_chasing_extended, 
+          title="Extended Chase Warning", style=shape.labeldown, location=location.abovebar, 
+          color=color.orange, text="EXTENDED\n(CHASE RISK)", textcolor=color.white, size=size.small)
+
+// =============================================================================
+// 2. CUMULATIVE VOLUME DELTA (CVD) & RSI DIVERGENCE ENGINE
+// =============================================================================
+// Intra-bar micro-delta approximation for Free TradingView:
+candle_spread = high - low
+delta = candle_spread > 0 ? volume * ((2.0 * close - high - low) / candle_spread) : 0.0
+cvd = ta.cum(delta)
+rsi_val = ta.rsi(close, rsi_len)
+
+// Swing pivots for divergence
+ph = ta.pivothigh(high, pivot_lb, pivot_lb)
+pl = ta.pivotlow(low, pivot_lb, pivot_lb)
+
+var float last_ph_price = na
+var float last_ph_rsi = na
+var float last_ph_cvd = na
+var float last_pl_price = na
+var float last_pl_rsi = na
+var float last_pl_cvd = na
+
+bool bear_div = false
+bool bull_div = false
+
+if not na(ph)
+    prev_ph_price = last_ph_price
+    prev_ph_rsi   = last_ph_rsi
+    prev_ph_cvd   = last_ph_cvd
+    
+    curr_ph_price = high[pivot_lb]
+    curr_ph_rsi   = rsi_val[pivot_lb]
+    curr_ph_cvd   = cvd[pivot_lb]
+    
+    if not na(prev_ph_price)
+        // Price Higher High, but RSI or CVD Lower High
+        if curr_ph_price > prev_ph_price and (curr_ph_rsi < prev_ph_rsi - 1.0 or curr_ph_cvd < prev_ph_cvd)
+            bear_div := true
+            
+    last_ph_price := curr_ph_price
+    last_ph_rsi   := curr_ph_rsi
+    last_ph_cvd   := curr_ph_cvd
+
+if not na(pl)
+    prev_pl_price = last_pl_price
+    prev_pl_rsi   = last_pl_rsi
+    prev_pl_cvd   = last_pl_cvd
+    
+    curr_pl_price = low[pivot_lb]
+    curr_pl_rsi   = rsi_val[pivot_lb]
+    curr_pl_cvd   = cvd[pivot_lb]
+    
+    if not na(prev_pl_price)
+        // Price Lower Low, but RSI or CVD Higher Low
+        if curr_pl_price < prev_pl_price and (curr_pl_rsi > prev_pl_rsi + 1.0 or curr_pl_cvd > prev_pl_cvd)
+            bull_div := true
+            
+    last_pl_price := curr_pl_price
+    last_pl_rsi   := curr_pl_rsi
+    last_pl_cvd   := curr_pl_cvd
+
+// Visual alerts on divergence
+plotshape(show_div and bear_div, title="Bearish Divergence", style=shape.triangledown, 
+          location=location.abovebar, color=color.red, size=size.normal, 
+          text="BEAR DIV\n(EXHAUSTION)", textcolor=color.white, offset=-pivot_lb)
+
+plotshape(show_div and bull_div, title="Bullish Divergence", style=shape.triangleup, 
+          location=location.belowbar, color=color.green, size=size.normal, 
+          text="BULL DIV\n(EXHAUSTION)", textcolor=color.white, offset=-pivot_lb)
+
+// =============================================================================
+// 3. LIQUIDITY SWEEP & CLIMAX PINBAR TRAP ENGINE
+// =============================================================================
+vol_sma = ta.sma(volume, 20)
+bar_range = math.max(high - low, 1e-4)
+upper_wick_pct = ((high - math.max(open, close)) / bar_range) * 100.0
+lower_wick_pct = ((math.min(open, close) - low) / bar_range) * 100.0
+
+is_sweep_high = (upper_wick_pct >= wick_thresh) and (volume >= vol_sma * vol_multiplier) and (bar_range >= 0.5 * atr_val)
+is_sweep_low  = (lower_wick_pct >= wick_thresh) and (volume >= vol_sma * vol_multiplier) and (bar_range >= 0.5 * atr_val)
+
+plotshape(show_sweep and is_sweep_high, title="Liquidity Sweep High", style=shape.xcross,
+          location=location.abovebar, color=color.fuchsia, size=size.small, text="SWEEP TRAP", textcolor=color.fuchsia)
+
+// =============================================================================
+// 4. 0DTE THETA DANGER ZONE (AFTERNOON EXPIRATION TRAP)
+// =============================================================================
+// Regular US Equities hours: 09:30 - 16:00 ET
+// Afternoon Danger Window for 0DTE: 13:30 - 16:00 ET
+t_hour = hour(time, "America/New_York")
+t_minute = minute(time, "America/New_York")
+
+in_0dte_danger_time = (t_hour > cutoff_hour) or (t_hour == cutoff_hour and t_minute >= cutoff_min)
+bgcolor(show_0dte_bg and in_0dte_danger_time ? color.new(color.purple, 92) : na, title="0DTE Danger Zone Background")
+
+// =============================================================================
+// 5. METOBOT DECISION ENGINE (ON-SCREEN HUD)
+// =============================================================================
+bool is_vetoed = is_chasing_extended or bear_div or is_sweep_high or in_0dte_danger_time
+
+var table hud = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 15), 
+                          border_color=color.gray, border_width=1)
+
+if show_hud and barstate.islast
+    table.cell(hud, 0, 0, "METOBOT v0.5 DECISION HUD", bgcolor=color.navy, text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 0, "REAL-TIME STATUS", bgcolor=color.navy, text_color=color.white, text_size=size.small)
+    
+    // Row 1: FVG Distance
+    fvg_txt = str.tostring(fvg_distance_atr, "#.##") + " ATR"
+    fvg_col = is_chasing_extended ? color.red : color.green
+    fvg_status = is_chasing_extended ? "OVEREXTENDED (CHASE)" : "HEALTHY BASE"
+    table.cell(hud, 0, 1, "FVG / Origin Distance", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 1, fvg_txt + " | " + fvg_status, bgcolor=fvg_col, text_color=color.white, text_size=size.small)
+
+    // Row 2: Divergence
+    div_status = bear_div ? "BEAR DIV ACTIVE" : (bull_div ? "BULL DIV ACTIVE" : "CLEAR / IN TACT")
+    div_col = (bear_div or bull_div) ? color.red : color.green
+    table.cell(hud, 0, 2, "Momentum / Divergence", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 2, div_status, bgcolor=div_col, text_color=color.white, text_size=size.small)
+
+    // Row 3: Sweep / Climax
+    sweep_status = is_sweep_high ? "TOP SWEEP TRAP" : (is_sweep_low ? "BOTTOM SWEEP" : "NORMAL CANDLE")
+    sweep_col = is_sweep_high ? color.maroon : color.gray
+    table.cell(hud, 0, 3, "Candle Liquidity Sweep", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 3, sweep_status, bgcolor=sweep_col, text_color=color.white, text_size=size.small)
+
+    // Row 4: 0DTE Options Timing
+    dte_status = in_0dte_danger_time ? "DANGER ZONE (>13:30 ET)" : "SAFE SESSION"
+    dte_col = in_0dte_danger_time ? color.purple : color.green
+    table.cell(hud, 0, 4, "0DTE Theta Risk Window", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 4, dte_status, bgcolor=dte_col, text_color=color.white, text_size=size.small)
+
+    // Row 5: Final Bot Verdict
+    verdict_txt = is_vetoed ? "⛔ VETO / NO TRADE" : "✅ ENTRY APPROVED"
+    verdict_col = is_vetoed ? color.red : color.teal
+    table.cell(hud, 0, 5, "FINAL BOT VERDICT", bgcolor=verdict_col, text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 5, verdict_txt, bgcolor=verdict_col, text_color=color.white, text_size=size.small)

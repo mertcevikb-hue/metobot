@@ -1,0 +1,140 @@
+# ==========================================
+# ENVIRONMENT & SECRETS (NEVER COMMIT!)
+# ==========================================
+.env
+.env.local
+.env.*.local
+secrets/
+credentials/
+*.key
+*.pem
+ecosystem.config.js  # Contains hardcoded config
+
+# ==========================================
+# PYTHON
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# VIRTUAL ENVIRONMENTS
+# ==========================================
+venv/
+env/
+ENV/
+.venv
+.env.venv
+
+# ==========================================
+# DATABASE & LOGS (Development only)
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+metobot.db
+database/*.db
+logs/
+*.log
+web.log
+*.log.gz
+
+# ==========================================
+# IDE & EDITOR
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# OS SPECIFIC
+# ==========================================
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ==========================================
+# CACHE & TEMP
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+*.tmp
+*.bak
+temp/
+tmp/
+~$*
+
+# ==========================================
+# NODE (if using for frontend)
+# ==========================================
+node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log*
+*.tar.gz
+
+# ==========================================
+# COMPILED PYTHON
+# ==========================================
+*.pyc
+*.pyo
+
+# ==========================================
+# GENERATED/BUILD ARTIFACTS
+# ==========================================
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ==========================================
+# TESTING
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ==========================================
+# STATIC FILES (if applicable)
+# ==========================================
+static/
+staticfiles/
+
+# ==========================================
+# UPLOADS & MEDIA
+# ==========================================
+media/
+uploads/
+*.mp4
+*.mov
+*.avi
