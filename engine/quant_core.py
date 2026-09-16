@@ -4,7 +4,7 @@ Unifies Market Regime, Direction Engine, Strategy Selector, Stock Engine,
 Option Engine, Confidence Decomposition, Risk Gate, and Trade Engine Veto.
 """
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from engine.data_guard import DataGuard
 from engine.features import FeatureEngine
 from engine.regime import RegimeEngine, StrategySelector
@@ -89,6 +89,33 @@ class QuantEngine:
                 contract_meta=option_data.get("meta") or option_data,
                 dt=dt
             )
+        else:
+            # Generate synthetic ATM option evaluation so candidate signals and trade gating
+            # evaluate realistic option premium pricing rather than stock price
+            is_call = direction_bias in ("BULLISH", "BUY", "LONG")
+            c_type = "CALL" if is_call else "PUT"
+            est_prem = max(0.50, round(spot_atr * 0.40, 2))
+            now_dt = dt or datetime.now(timezone.utc)
+            opt_eval = OptionEngine.evaluate(
+                spot_price=spot_price,
+                spot_atr=spot_atr,
+                direction_bias=direction_bias,
+                option_quote={
+                    "strike_price": round(spot_price),
+                    "bid_price": round(est_prem * 0.95, 2),
+                    "ask_price": round(est_prem * 1.05, 2),
+                    "last_trade_price": est_prem,
+                    "implied_volatility": 0.25
+                },
+                contract_meta={
+                    "ticker": f"{symbol}_ATM_{c_type}",
+                    "strike_price": round(spot_price),
+                    "expiration_date": now_dt.strftime("%Y-%m-%d"),
+                    "volume": 1000,
+                    "open_interest": 5000
+                },
+                dt=dt
+            )
 
         # 8. Confluence & Contradiction Engine (HTF Context vs Intraday Structure, Symmetrical Gating)
         confluence_eval = ConfluenceEngine.evaluate(
@@ -169,12 +196,16 @@ class QuantEngine:
 
         entry_candidate = primary_strat["trigger_valid"] and risk["approved"] and not is_vetoed and (state == "ENTRY_READY")
         candidate_decision = strat_side if entry_candidate else "NO TRADE"
+        prem_price = (opt_eval.get("premium") if opt_eval else None) or round(max(0.50, spot_atr * 0.40), 2)
 
         candidate_payload = {
-            "symbol": symbol,
+            "symbol": (opt_eval.get("contract_ticker") if opt_eval else None) or f"{symbol}_ATM",
             "underlying": symbol,
+            "instrument": "OPTION",
             "decision": candidate_decision,
-            "price": spot_price,
+            "price": prem_price,
+            "premium": prem_price,
+            "stock_price": spot_price,
             "score": primary_strat["score"],
             "strategy": primary_strat["strategy"],
             "direction_evaluation": dir_res,
@@ -184,6 +215,7 @@ class QuantEngine:
             "risk_metrics": risk,
             "entry_valid": entry_candidate,
             "option_data": opt_eval or option_data,
+            "option_evaluation": opt_eval,
             "is_vetoed": is_vetoed,
             "veto_reasons": veto_reasons
         }

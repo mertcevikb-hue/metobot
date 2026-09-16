@@ -444,8 +444,16 @@ class Bot2LiveEngine:
                         logger.info(f"🚀 {symbol}: Entry approved by Trade Engine. Executing paper trade order...")
                         dispatch_res = await self.dispatcher.dispatch(signal)
                         if dispatch_res.get("order", {}).get("status") in ["filled", "open"]:
+                            opt_p = dispatch_res.get("order", {}).get("fill_price") or signal.get("premium")
+                            if not opt_p and signal.get("option_data"):
+                                raw_p = signal["option_data"].get("premium")
+                                if raw_p and raw_p != "N/A":
+                                    try:
+                                        opt_p = float(str(raw_p).replace("$", "").strip())
+                                    except ValueError:
+                                        opt_p = None
                             self.positions[symbol]["state"] = "ENTERED"
-                            self.positions[symbol]["entry_price"] = current_price
+                            self.positions[symbol]["entry_price"] = opt_p or current_price
                             self.positions[symbol]["entry_time"] = signal["timestamp"]
                             self.positions[symbol]["entry_score"] = signal["score"]
                             self.positions[symbol]["take_profit"] = signal.get("risk_metrics", {}).get("take_profit")

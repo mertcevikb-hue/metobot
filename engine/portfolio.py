@@ -121,10 +121,15 @@ class PortfolioManager:
 
         if instrument == "OPTION":
             # Options: 1 contract = 100 shares. Risk per contract = premium at risk
-            stop_dist = abs(entry_price - stop_loss) if stop_loss and stop_loss > 0 else (entry_price * 0.50)
-            dollar_risk_per_contract = max(stop_dist * 100.0, 50.0)
-            
-            raw_qty = int(adjusted_risk / dollar_risk_per_contract)
+            # If stop_loss is provided in stock terms (> entry_price * 1.5), disregard it as option stop loss
+            if stop_loss and 0 < stop_loss < entry_price:
+                stop_dist = abs(entry_price - stop_loss)
+            else:
+                stop_dist = entry_price * (0.20 if is_0dte else 0.35)
+
+            dollar_risk_per_contract = max(stop_dist * 100.0, min(50.0, entry_price * 100.0))
+
+            raw_qty = int(adjusted_risk / max(dollar_risk_per_contract, 1.0))
             qty = max(1, min(raw_qty, 10))  # standard 1 to 10 contracts
             notional = round(qty * entry_price * 100.0, 2)
             expl = f"Option sizing: {qty} contract(s) @ ${entry_price:.2f} (Risk: ${qty * dollar_risk_per_contract:.2f})"
@@ -198,7 +203,19 @@ class PortfolioManager:
         trade_id = str(trade.get("trade_id"))
         entry_p = float(trade.get("entry_price", 0.0))
         qty = float(trade.get("quantity", 1.0))
-        mult = 100.0 if trade.get("option_type") in ["CALL", "PUT"] else 1.0
+        is_opt = trade.get("option_type") in ["CALL", "PUT"] or trade.get("instrument") == "OPTION"
+        if is_opt:
+            prem = trade.get("premium") or trade.get("entry_premium")
+            if prem:
+                try:
+                    entry_p = float(str(prem).replace("$", "").strip())
+                except (ValueError, TypeError):
+                    pass
+            elif entry_p > 50.0:
+                fill = trade.get("fill_price")
+                if fill and float(fill) < 50.0:
+                    entry_p = float(fill)
+        mult = 100.0 if is_opt else 1.0
         notional = round(entry_p * qty * mult, 2)
 
         trade["notional"] = notional

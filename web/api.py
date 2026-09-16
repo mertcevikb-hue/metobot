@@ -523,6 +523,58 @@ async def analyze_option(symbol: str):
         "reward_risk_ratio": round(tp1_stock_delta / max(sl_stock_delta, 0.01), 2)
     }
 
+    # Re-evaluate candidate trade with actual option contract pricing and structure
+    from engine.trade_engine import global_trade_engine
+    from engine.market_hours import MarketSchedule
+    is_mkt_open, session_name, mkt_reason = MarketSchedule.is_market_open(sym)
+
+    mls = opt_data.get("multi_leg_structure") or {}
+    eff_strat = mls.get("strategy") or quant_res.get("strategy", "QUANT_SETUP")
+
+    opt_candidate_payload = {
+        "symbol": opt_data.get("contract_symbol") or f"{sym}_{opt_data.get('strike')}_{opt_data.get('direction')}",
+        "underlying": sym,
+        "instrument": "OPTION",
+        "decision": quant_res.get("strategy_side") or quant_res.get("decision", "NO_TRADE"),
+        "price": opt_prem,
+        "stock_price": stock_p,
+        "premium": opt_prem,
+        "score": quant_res.get("setup_score", 0.0),
+        "strategy": eff_strat if eff_strat not in ["NONE", "NO_STRATEGY_MATCH", "NO_SETUP"] else quant_res.get("strategy", "QUANT_SETUP"),
+        "direction_evaluation": quant_res.get("direction_evaluation"),
+        "confidence_evaluation": quant_res.get("confidence_evaluation"),
+        "confluence_evaluation": quant_res.get("confluence_evaluation"),
+        "htf_pattern": quant_res.get("htf_pattern"),
+        "risk_metrics": {
+            "entry_price": opt_prem,
+            "stop_loss": opt_sl,
+            "take_profit": opt_tp1,
+            "opt_sl": opt_sl,
+            "opt_tp1": opt_tp1,
+            "opt_tp2": opt_tp2,
+            "stock_entry": stock_p,
+            "stock_sl": stock_sl,
+            "stock_tp1": stock_tp1,
+            "reward_risk_ratio": round(tp1_stock_delta / max(sl_stock_delta, 0.01), 2)
+        },
+        "entry_valid": quant_res.get("entry_valid", False),
+        "option_data": opt_data,
+        "option_evaluation": opt_eval if 'opt_eval' in locals() else None,
+        "is_vetoed": quant_res.get("is_vetoed", False),
+        "veto_reasons": quant_res.get("veto_reasons", [])
+    }
+
+    opt_trade_eval = global_trade_engine.evaluate_candidate(
+        candidate_signal=opt_candidate_payload,
+        is_market_open=is_mkt_open,
+        market_reason=mkt_reason
+    )
+    quant_res["trade_evaluation"] = opt_trade_eval
+    quant_res["trade_verdict"] = opt_trade_eval["verdict"]
+    quant_res["decision_explanation"] = opt_trade_eval["decision_explanation"]
+    if 'opt_eval' in locals() and opt_eval:
+        quant_res["option_evaluation"] = opt_eval
+
     return {
         "quant_synthesis": quant_res,
         "option_contract": opt_data,

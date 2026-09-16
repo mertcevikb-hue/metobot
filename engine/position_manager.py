@@ -38,6 +38,20 @@ class PositionManager:
         qty = float(trade_data.get("quantity", 1.0))
         entry_p = float(trade_data.get("entry_price", 0.0))
 
+        # Ensure option positions consider premium prices, not stock price
+        is_opt = trade_data.get("option_type") in ["CALL", "PUT"] or trade_data.get("instrument") == "OPTION"
+        if is_opt:
+            prem = trade_data.get("premium") or trade_data.get("entry_premium")
+            if prem:
+                try:
+                    entry_p = float(str(prem).replace("$", "").strip())
+                except (ValueError, TypeError):
+                    pass
+            elif entry_p > 50.0:
+                fill = trade_data.get("fill_price")
+                if fill and float(fill) < 50.0:
+                    entry_p = float(fill)
+
         pos = {
             "trade_id": trade_id,
             "symbol": trade_data.get("symbol", underlying),
@@ -140,8 +154,23 @@ class PositionManager:
         pos["closed_at"] = datetime.now(timezone.utc).isoformat()
 
         # Calculate P&L
-        entry_p = float(pos.get("entry_price", 0.0))
-        qty = float(pos.get("quantity", 1.0))
+        trade_data = pos.get("trade_data", {})
+        entry_p = float(trade_data.get("entry_price", pos.get("entry_price", 0.0)))
+        qty = float(trade_data.get("quantity", pos.get("quantity", 1.0)))
+
+        # Ensure option positions consider premium prices, not stock price
+        is_opt = trade_data.get("option_type") in ["CALL", "PUT"] or trade_data.get("instrument") == "OPTION"
+        if is_opt:
+            prem = trade_data.get("premium") or trade_data.get("entry_premium")
+            if prem:
+                try:
+                    entry_p = float(str(prem).replace("$", "").strip())
+                except (ValueError, TypeError):
+                    pass
+            elif entry_p > 50.0:
+                fill = trade_data.get("fill_price")
+                if fill and float(fill) < 50.0:
+                    entry_p = float(fill)
         multiplier = 100.0 if pos.get("option_type") in ["CALL", "PUT"] else 1.0
         side = pos.get("side", "LONG")
 

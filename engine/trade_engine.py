@@ -185,10 +185,62 @@ class TradeEngine:
         # -------------------------------------------------------------
         # GATE 9: Capital & Underlying Exposure Limit (No Duplicates)
         # -------------------------------------------------------------
-        price = float(candidate_signal.get("price", 0.0))
-        inst_type = "OPTION" if opt_res else "STOCK"
-        sl = risk_m.get("stop_loss", 0.0)
-        is_0dte = bool(opt_res.get("is_0dte", False)) if opt_res else False
+        inst_type = "OPTION" if (opt_res or candidate_signal.get("instrument") == "OPTION" or candidate_signal.get("premium")) else "STOCK"
+        raw_price = candidate_signal.get("price", 0.0)
+
+        if inst_type == "OPTION":
+            # For options, capital sizing must be based on contract premium price, NOT stock price
+            opt_prem = None
+            if isinstance(opt_res, dict):
+                opt_prem = (
+                    opt_res.get("premium")
+                    or opt_res.get("mid")
+                    or (opt_res.get("multi_leg_structure", {}).get("net_debit") if isinstance(opt_res.get("multi_leg_structure"), dict) else None)
+                    or opt_res.get("last")
+                    or opt_res.get("ask")
+                )
+            if opt_prem is None:
+                opt_prem = (
+                    candidate_signal.get("premium")
+                    or candidate_signal.get("entry_premium")
+                    or candidate_signal.get("option_premium")
+                )
+            if opt_prem is None and isinstance(candidate_signal.get("option_data"), dict):
+                opt_prem = candidate_signal["option_data"].get("premium")
+
+            # Parse float if string like "$2.58"
+            if opt_prem is not None:
+                try:
+                    price = float(str(opt_prem).replace("$", "").strip())
+                except (ValueError, TypeError):
+                    price = float(raw_price) if raw_price > 0 else 1.50
+            else:
+                price = float(raw_price) if raw_price > 0 else 1.50
+
+            # If price looks like a stock price (e.g. > $50) and no explicit premium given, convert to realistic ATM option premium
+            if price > 50.0 and opt_prem is None:
+                price = round(max(0.50, price * 0.01), 2)
+
+            # Option stop loss should be option-specific (not the underlying stock SL)
+            opt_sl = None
+            if isinstance(risk_m, dict):
+                opt_sl = risk_m.get("opt_sl")
+            if opt_sl is None and isinstance(opt_res, dict):
+                opt_sl = opt_res.get("opt_sl") or (opt_res.get("dynamic_exit_zones", {}).get("opt_sl") if isinstance(opt_res.get("dynamic_exit_zones"), dict) else None)
+
+            if opt_sl is not None:
+                try:
+                    sl = float(str(opt_sl).replace("$", "").strip())
+                except (ValueError, TypeError):
+                    sl = 0.0
+            else:
+                raw_sl = float(risk_m.get("stop_loss", 0.0))
+                sl = raw_sl if 0 < raw_sl < price else 0.0
+        else:
+            price = float(raw_price)
+            sl = float(risk_m.get("stop_loss", 0.0))
+
+        is_0dte = bool(opt_res.get("is_0dte", False)) if (opt_res and isinstance(opt_res, dict)) else bool(candidate_signal.get("is_0dte", False))
 
         planned_qty, planned_notional, size_expl = self.portfolio.calculate_position_size(
             symbol=symbol,

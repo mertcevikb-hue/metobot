@@ -156,7 +156,10 @@ class SignalDispatcher:
                 "bid_ask_spread": f"${spread_abs:.2f}",
                 "option_score": option_score
             }
-            
+            if is_liquid and premium > 0:
+                signal["premium"] = premium
+                signal["instrument"] = "OPTION"
+
             # 6. Final Risk Gate: Veto trade if option is illiquid, 0DTE afternoon cutoff, or IV crush
             from filters.veto_filter import VetoFilter
             is_opt_vetoed, opt_veto_reason = VetoFilter.check_options_time_and_iv(signal["option_data"])
@@ -343,13 +346,15 @@ class SignalDispatcher:
 
             # Trade Engine Gatekeeper with VETO authority
             trade_eval = signal.get("trade_evaluation")
-            if not trade_eval:
+            # If trade_eval was generated on stock before option enrichment, or not present, re-evaluate
+            if not trade_eval or (signal.get("option_data") and trade_eval.get("planned_notional", 0) > 1000 and signal.get("premium")):
                 from engine.trade_engine import global_trade_engine
                 trade_eval = global_trade_engine.evaluate_candidate(
                     candidate_signal=signal,
                     is_market_open=is_market_open,
                     market_reason=market_reason
                 )
+                signal["trade_evaluation"] = trade_eval
 
             if not trade_eval.get("approved"):
                 logger.warning(f"🚫 Trade Engine VETO for {symbol}: {trade_eval.get('primary_reason')}")
@@ -643,10 +648,15 @@ class SignalDispatcher:
         # Opsiyon sözleşme detayları varsa ekle
         opt = signal.get("option_data", {})
         if opt and opt.get("contract_ticker"):
-            premium = float(opt.get("premium", 0.0))
+            raw_prem = str(opt.get("premium", "0.0")).replace("$", "").strip()
+            try:
+                premium = float(raw_prem)
+            except ValueError:
+                premium = 0.0
+            raw_strike = str(opt.get("strike_price", "")).replace("$", "").strip()
             lines.append(f"🔷 Opsiyon: {opt.get('contract_ticker')} @ ${premium:.2f}")
-            if opt.get("strike_price"):
-                lines.append(f"🔷 Strike: ${opt.get('strike_price')} | Vade: {opt.get('expiration_date', 'N/A')}")
+            if raw_strike:
+                lines.append(f"🔷 Strike: ${raw_strike} | Vade: {opt.get('expiration_date', 'N/A')}")
 
         return "\n".join(lines)
 
